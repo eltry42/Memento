@@ -1,5 +1,6 @@
 "use client";
 
+// Gets connectionConfig token
 import { useCallback, useState } from "react";
 import { SessionPhase } from "@/types/session";
 
@@ -23,7 +24,7 @@ export function useLiveKitSession(): UseLiveKitSessionReturn {
   const startSession = useCallback(async () => {
     if (sessionPhase !== "idle") return;
 
-    setSessionPhase("connecting");
+    setSessionPhase("connecting"); // Update UI
 
     try {
       const roomName = `memento-${Date.now()}`;

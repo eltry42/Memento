@@ -6,7 +6,7 @@ import ChatBubbleOverlay from "./ChatBubbleOverlay";
 import BottomControls from "./BottomControls";
 import ChatLog from "./ChatLog";
 import { useAvatarState } from "@/hooks/useAvatarState";
-import { useMockConversation } from "@/hooks/useMockConversation";
+import { useRealConversation } from "@/hooks/useRealConversation";
 import OnboardingOverlay from "@/components/onboarding/OnboardingOverlay";
 
 export default function HomeScreen() {
@@ -19,7 +19,7 @@ export default function HomeScreen() {
     handleMicPress,
     handleGreetingComplete,
     handleSpeakingComplete,
-  } = useMockConversation({ dispatch });
+  } = useRealConversation({ dispatch });
 
   const micDisabled = state !== "idle" && state !== "greeting";
 
