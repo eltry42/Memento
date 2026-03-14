@@ -26,16 +26,8 @@ For quick hackathon testing, this repo now includes a lightweight file-backed da
 
 - `POST /api/process-audio` now stores each user + assistant exchange and auto-extracts reminder candidates.
 - `GET /api/conversation?sessionId=<id>` returns saved conversation history.
-- `GET /api/reminders?sessionId=<id>` returns all reminders (recurring + one-off).
-- `POST /api/reminders` creates manual reminders (`one-off` or `recurring`).
-- `GET /api/reminders?sessionId=<id>&dueOnly=true&markNotified=true` returns due notification events and marks each notification checkpoint as sent.
-- `PATCH /api/reminders` with `{ "reminderId": "...", "action": "done" }` marks a reminder as done.
-
-Reminder delivery MVP:
-- Reminders tab has two sections: recurring reminders and one-off reminders.
-- One-off events trigger in-app/browser reminders at 12h, 6h, 1h, and at event time.
-- Recurring reminders (daily/weekly) trigger the same 12h/6h/1h/event checkpoints for each occurrence.
-- Home screen polls due reminder notifications every 30s.
+- `GET /api/reminders?sessionId=<id>` returns extracted reminders.
+- `PATCH /api/reminders` with `{ "reminderId": "..." }` marks a reminder as done.
 
 When recording audio from the frontend, include `sessionId` in the `FormData` to group records by user/session.
 
