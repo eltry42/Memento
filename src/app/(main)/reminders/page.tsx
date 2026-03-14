@@ -114,24 +114,14 @@ export default function RemindersPage() {
       }
     }
 
-    let response = await fetch("/api/reminders", {
+    const response = await fetch("/api/reminders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    // MVP fallback for environments/proxies that reject POST on route handlers.
-    if (response.status === 405) {
-      response = await fetch("/api/reminders", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
-
     if (!response.ok) {
-      const text = await response.text();
-      setError(`Failed to create reminder (${response.status}): ${text || "unknown error"}`);
+      setError(`Failed to create reminder (${response.status})`);
       return;
     }
 

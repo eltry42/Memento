@@ -21,7 +21,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [bubbleText, setBubbleText] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const greetingDone = useRef(false);
-  const sessionIdRef = useRef(getOrCreateSessionId());
+  const sessionIdRef = useRef(`session-${Date.now()}`);
 
   // Greeting logic
   useEffect(() => {
