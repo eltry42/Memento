@@ -6,6 +6,7 @@ import { AvatarEvent } from "@/types/avatar";
 import { ConversationMessage } from "@/types/conversation";
 import { GREETING_TEXT } from "@/lib/mock-data";
 import { VAD_REDEMPTION_MS } from "@/lib/constants";
+import { getOrCreateSessionId } from "@/lib/client-session";
 
 interface UseRealConversationOptions {
   dispatch: (event: AvatarEvent) => void; // sends action command
@@ -119,6 +120,21 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     },
   });
 
+
+  const addAssistantMessage = useCallback((text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextMessageId(),
+        role: "assistant",
+        text,
+        timestamp: Date.now(),
+      },
+    ]);
+    setBubbleText(text);
+    dispatch({ type: "START_SPEAKING", text });
+  }, [dispatch]);
+
   const handleMicPress = useCallback(() => {
     if (vad.listening) {
       vad.pause();
@@ -140,8 +156,10 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   return {
     bubbleText,
     messages,
+    sessionId: sessionIdRef.current,
     handleMicPress,
     handleGreetingComplete,
     handleSpeakingComplete,
+    addAssistantMessage,
   };
 }
