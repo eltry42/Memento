@@ -1,4 +1,6 @@
 "use client";
+// Note: stores conversation state in user's browser
+// Data is lost on refresh, but allows for faster interactions without waiting for backend response every time
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMicVAD, utils } from "@ricky0123/vad-react";
@@ -20,6 +22,7 @@ function nextMessageId() {
 export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [bubbleText, setBubbleText] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [summary, setSummary] = useState<string>("No summary yet.");
   const greetingDone = useRef(false);
   const greetingPlaybackAttemptedRef = useRef(false);
   const completionModeRef = useRef<"audio" | "bubble">("bubble");
@@ -125,6 +128,12 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     [cleanupAudio, finishAssistantSpeech, language]
   );
 
+  // Load summary from LocalStorage on mount
+  useEffect(() => {
+    const savedSummary = localStorage.getItem("memento_summary");
+    if (savedSummary) setSummary(savedSummary);
+  }, []);
+
   // Greeting logic
   useEffect(() => {
     if (greetingDone.current) return;
@@ -136,7 +145,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         {
           id: nextMessageId(),
           role: "assistant",
-          text: GREETING_TEXT,
+          text: GREETING_TEXT, // TODO: vary the greeting based on time of day or randomly select from a list
           timestamp: Date.now(),
         },
       ]);
@@ -167,11 +176,12 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     },
 
     onSpeechEnd: async (audio) => {
+      console.log("[VAD] Speech ended! Starting processing...");
       vad.pause(); // pause microphone
       // User stopped talking
       dispatch({ type: "STOP_LISTENING" });
       dispatch({ type: "START_THINKING" });
-      setBubbleText("...");
+      setBubbleText("..."); // SHOULD show three dots immediately
 
       try {
         // Convert raw Float32Array audio into a WAV Blob
@@ -181,11 +191,13 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         // Package the Blob into FormData so we can send it over HTTP
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.wav");
+        formData.append("history", JSON.stringify(messages)); // store entire convo history
+        formData.append("summary", summary); // send current summary to backend for context
 
-        console.log("Sending audio to backend...");
+        console.log("Sending audio, previous convo history, and summary to backend for processing...");
 
         // Send the POST request to your Next.js backend
-        const response = await fetch("/api/process-audio", { // link to process-audio/route.ts
+        const response = await fetch("/api/process-audio", {
           method: "POST",
           body: formData,
         });
@@ -196,10 +208,15 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
 
         const data = await response.json();
         // extract specific fields
-        const userTranscript = data.userText; 
-        const aiReply = data.aiText;      
-
-        // Update chat log and UI
+        const userTranscript = data.userText;
+        const aiReply = data.aiText;
+        
+        // Update summary if provided by backend
+        if (data.summary) {
+          setSummary(data.summary);
+          localStorage.setItem("memento_summary", data.summary); // persist summary in LocalStorage
+          console.log("Updated summary received from backend:\n", data.summary, "\n-------------------");
+        }
         setMessages((prev) => [
           ...prev,
           {
@@ -223,7 +240,9 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         void playAssistantAudio(aiReply, "speaking");
       } catch (error) {
         console.error("Server request failed", error);
-        setBubbleText("I'm sorry, I couldn't process your voice right now. Please try speaking again.");
+        setBubbleText(
+          "I'm sorry, I couldn't process your voice right now. Please try speaking again.",
+        );
         dispatch({ type: "SPEAKING_DONE" }); // Reset the avatar
       }
     },
