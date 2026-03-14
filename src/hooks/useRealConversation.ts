@@ -20,6 +20,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [bubbleText, setBubbleText] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const greetingDone = useRef(false);
+  const sessionIdRef = useRef(`session-${Date.now()}`);
 
   // Greeting logic
   useEffect(() => {
@@ -70,6 +71,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         // Package the Blob into FormData so we can send it over HTTP
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.wav");
+        formData.append("sessionId", sessionIdRef.current);
 
         console.log("Sending audio to backend...");
 

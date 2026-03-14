@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { extractReminders, saveConversationPair } from "@/lib/mvp-db";
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
+    const sessionId = (formData.get("sessionId") as string) || "default-session";
     const apiKey = process.env.MERALION_API_KEY;
 
     if (!audioFile || !apiKey) {
@@ -82,9 +84,13 @@ export async function POST(request: Request) {
 
 
     // Return both the user's transcript and the AI's reply
+    saveConversationPair({ sessionId, userText, aiText });
+    const reminders = extractReminders({ sessionId, sourceText: userText });
+
     return NextResponse.json({
       userText: userText,
       aiText: aiText,
+      reminders,
     });
   } catch (error) {
     console.error("Audio Processing Error:", error);

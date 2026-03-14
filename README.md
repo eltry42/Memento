@@ -20,6 +20,17 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## MVP Conversation + Reminder Storage
+
+For quick hackathon testing, this repo now includes a lightweight file-backed database at `data/memento-db.json`.
+
+- `POST /api/process-audio` now stores each user + assistant exchange and auto-extracts reminder candidates.
+- `GET /api/conversation?sessionId=<id>` returns saved conversation history.
+- `GET /api/reminders?sessionId=<id>` returns extracted reminders.
+- `PATCH /api/reminders` with `{ "reminderId": "..." }` marks a reminder as done.
+
+When recording audio from the frontend, include `sessionId` in the `FormData` to group records by user/session.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
