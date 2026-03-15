@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { getOrCreateSessionId } from "@/lib/client-session";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useMode } from "@/hooks/useMode";
 
 type ReminderKind = "one-off" | "recurring";
 type ReminderType = "appointment" | "medication" | "general";
@@ -388,25 +387,6 @@ export default function RemindersPage() {
         </section>
       </div>
 
-      {/* FAB (caretaker only) */}
-      {isCaretaker && (
-        <button
-          onClick={handleAdd}
-          className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-teal text-white shadow-lg flex items-center justify-center active:scale-90 transition-transform z-40"
-          aria-label="Add reminder"
-        >
-          <PlusIcon />
-        </button>
-      )}
-
-      {/* Add/Edit Sheet */}
-      {showSheet && (
-        <ReminderSheet
-          reminder={editingReminder}
-          onClose={() => { setShowSheet(false); setEditingReminder(null); }}
-          onSave={handleSave}
-        />
-      )}
     </div>
   );
 }

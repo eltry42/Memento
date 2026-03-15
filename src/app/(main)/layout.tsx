@@ -13,15 +13,17 @@ export default function MainLayout({
 }) {
   return (
     <LanguageProvider>
-      <BackgroundProvider>
-        <AvatarProvider>
-          <AvatarStateMachineProvider>
-            <TopNavBar />
-            <ReminderPopup />
-            {children}
-          </AvatarStateMachineProvider>
-        </AvatarProvider>
-      </BackgroundProvider>
+      <ModeProvider>
+        <BackgroundProvider>
+          <AvatarProvider>
+            <AvatarStateMachineProvider>
+              <TopNavBar />
+              <ReminderPopup />
+              {children}
+            </AvatarStateMachineProvider>
+          </AvatarProvider>
+        </BackgroundProvider>
+      </ModeProvider>
     </LanguageProvider>
   );
 }

@@ -1,10 +1,37 @@
 import { NextResponse } from "next/server";
-import { saveConversationPair } from "@/lib/mvp-db";
 const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_TRANSCRIPT_RETRIES = 10;
 
 // Helper to format history for the AI's instruction
-function compileConvoHistory(history: any[]) {
+type ConversationMessage = { role: "user" | "assistant"; text: string };
+
+
+function parseHistory(raw: string | null): ConversationMessage[] {
+  if (!raw) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((entry): ConversationMessage[] => {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        "role" in entry &&
+        "text" in entry &&
+        (entry.role === "user" || entry.role === "assistant") &&
+        typeof entry.text === "string"
+      ) {
+        return [{ role: entry.role, text: entry.text }];
+      }
+      return [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function compileConvoHistory(history: ConversationMessage[]) {
   if (!history || history.length === 0) return "No previous context.";
   // Slice to keep only the last 6 messages to stay within token limits
   return history
@@ -17,14 +44,11 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
-    const sessionId =
-      (formData.get("sessionId") as string) || "default-session";
     const apiKey = process.env.MERALION_API_KEY;
     const currentSummary = (formData.get("summary") as string) || "";
 
     // Extract conversation history if sent
-    const historyData = formData.get("history") as string;
-    const history = historyData ? JSON.parse(historyData) : []; // Expecting an array of { role: "user" | "assistant", text: string }
+    const history = parseHistory(formData.get("history") as string | null);
 
     if (!audioFile || !apiKey) {
       return NextResponse.json(
@@ -127,7 +151,7 @@ export async function POST(request: Request) {
       console.log("Archiving oldest 5 messages into Long-term Memory...");
       const oldestMessages = history
         .slice(0, 5)
-        .map((m: any) => `${m.role}: ${m.text}`)
+        .map((m) => `${m.role}: ${m.text}`)
         .join("\n");
       console.log("CONDENSING OLDEST 5 MESSAGES:\n", oldestMessages);
 
@@ -148,7 +172,7 @@ export async function POST(request: Request) {
         const summaryData = await summaryResponse.json();
         updatedSummary = summaryData.response.text;
         console.log("Updated Summary:\n", updatedSummary, "\n-------------------");
-      } catch (err) {
+      } catch {
         console.error("Summarization failed, keeping old summary.");
       }
     }

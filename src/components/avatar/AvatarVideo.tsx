@@ -55,6 +55,7 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
   const offA = useRef<HTMLCanvasElement | null>(null);
   const offB = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number>(0);
+  const processFrameRef = useRef<() => void>(() => {});
   const loadedRef = useRef(false);
 
   // Two video slots for crossfade
@@ -69,7 +70,10 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
   const { avatar } = useAvatar();
   const videoSources = getVideoForState(avatar, state);
   const chromakeyRef = useRef<ChromakeyMode>(avatar.chromakey);
-  chromakeyRef.current = avatar.chromakey;
+
+  useEffect(() => {
+    chromakeyRef.current = avatar.chromakey;
+  }, [avatar.chromakey]);
 
   const srcKey = videoSources.mp4; // unique identifier for current source
 
@@ -166,7 +170,7 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
     const videoB = videoBRef.current;
 
     if (!canvas || !videoA || !videoB) {
-      rafRef.current = requestAnimationFrame(processFrame);
+      rafRef.current = requestAnimationFrame(processFrameRef.current);
       return;
     }
 
@@ -196,7 +200,7 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
     // Determine output size from active frame
     const frame = activeFrame || oldFrame;
     if (!frame) {
-      rafRef.current = requestAnimationFrame(processFrame);
+      rafRef.current = requestAnimationFrame(processFrameRef.current);
       return;
     }
 
@@ -210,7 +214,7 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      rafRef.current = requestAnimationFrame(processFrame);
+      rafRef.current = requestAnimationFrame(processFrameRef.current);
       return;
     }
 
@@ -241,11 +245,15 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
       onLoad?.();
     }
 
-    rafRef.current = requestAnimationFrame(processFrame);
+    rafRef.current = requestAnimationFrame(processFrameRef.current);
   }, [onLoad, processVideoFrame]);
 
   useEffect(() => {
-    rafRef.current = requestAnimationFrame(processFrame);
+    processFrameRef.current = processFrame;
+  }, [processFrame]);
+
+  useEffect(() => {
+    rafRef.current = requestAnimationFrame(processFrameRef.current);
     return () => cancelAnimationFrame(rafRef.current);
   }, [processFrame]);
 
@@ -288,3 +296,4 @@ export default function AvatarVideo({ state, onLoad }: AvatarVideoProps) {
     </div>
   );
 }
+
