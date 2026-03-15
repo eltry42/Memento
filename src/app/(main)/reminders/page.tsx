@@ -1,438 +1,578 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { getOrCreateSessionId } from "@/lib/client-session";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useMode } from "@/hooks/useMode";
 
-// ── Types ──
-type ReminderType = "general" | "medication";
+type ReminderKind = "one-off" | "recurring";
+type ReminderType = "appointment" | "medication" | "general";
+type RecurringPattern = "daily" | "weekly";
 
-interface Reminder {
+interface ReminderItem {
   id: string;
-  text: string;
-  time: string;
+  title: string;
+  kind: ReminderKind;
   type: ReminderType;
-  dosage?: string;
-  frequency?: string;
-  taken?: boolean;
+  dueAt: string | null;
+  recurringPattern: RecurringPattern | null;
+  recurringTime: string | null;
+  recurringWeekday: number | null;
+  sourceText: string;
+  status: "active" | "done";
 }
 
-// ── Constants ──
-const STORAGE_KEY = "memento-reminders";
-
-const SEED_REMINDERS: Reminder[] = [
-  { id: "r1", text: "Take morning medication", time: "8:00 AM", type: "medication", dosage: "1 tablet", frequency: "Daily" },
-  { id: "r2", text: "Doctor appointment — Dr. Tan", time: "2:00 PM", type: "general" },
-  { id: "r3", text: "Take evening medication", time: "8:00 PM", type: "medication", dosage: "2 tablets", frequency: "Daily" },
-  { id: "r4", text: "Marcus's piano recital", time: "5:00 PM", type: "general" },
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
 ];
 
-function loadReminders(): Reminder[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return SEED_REMINDERS;
-}
-
-function saveReminders(reminders: Reminder[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reminders));
-}
-
-// ── Icons ──
-function PlusIcon({ className = "w-6 h-6" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function EditIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
-
-// ── Main Component ──
 export default function RemindersPage() {
   const { t } = useLanguage();
   const { mode } = useMode();
   const isCaretaker = mode === "caretaker";
 
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [mounted, setMounted] = useState(false);
-  const [showSheet, setShowSheet] = useState(false);
-  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [sessionId, setSessionId] = useState("");
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<ReminderKind>("one-off");
+  const [type, setType] = useState<ReminderType>("general");
+  const [dueAt, setDueAt] = useState("");
+  const [recurringPattern, setRecurringPattern] =
+    useState<RecurringPattern>("daily");
+  const [recurringTime, setRecurringTime] = useState("09:00");
+  const [recurringWeekday, setRecurringWeekday] = useState(1);
+
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(
+    null,
+  );
+  const [editTitle, setEditTitle] = useState("");
+  const [editDueAt, setEditDueAt] = useState("");
+  const [editRecurringPattern, setEditRecurringPattern] =
+    useState<RecurringPattern>("daily");
+  const [editRecurringTime, setEditRecurringTime] = useState("09:00");
 
   useEffect(() => {
-    setReminders(loadReminders());
-    setMounted(true);
+    setSessionId(getOrCreateSessionId());
   }, []);
 
-  const updateReminders = (updated: Reminder[]) => {
-    setReminders(updated);
-    saveReminders(updated);
-  };
+  const loadReminders = useCallback(async () => {
+    if (!sessionId) return;
 
-  const handleToggleTaken = (id: string) => {
-    updateReminders(
-      reminders.map((r) => (r.id === id ? { ...r, taken: !r.taken } : r))
-    );
-  };
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/reminders?sessionId=${encodeURIComponent(sessionId)}`,
+      );
 
-  const handleDelete = (id: string) => {
-    updateReminders(reminders.filter((r) => r.id !== id));
-  };
+      if (!response.ok) {
+        throw new Error(`Failed to load reminders (${response.status})`);
+      }
 
-  const handleSave = (reminder: Reminder) => {
-    if (editingReminder) {
-      updateReminders(reminders.map((r) => (r.id === reminder.id ? reminder : r)));
-    } else {
-      updateReminders([...reminders, reminder]);
+      const data = await response.json();
+      setReminders(data.reminders ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load reminders");
+    } finally {
+      setLoading(false);
     }
-    setShowSheet(false);
-    setEditingReminder(null);
+  }, [sessionId]);
+
+  useEffect(() => {
+    loadReminders();
+  }, [loadReminders]);
+
+  const recurringReminders = useMemo(
+    () =>
+      reminders.filter(
+        (item) => item.kind === "recurring" && item.status === "active",
+      ),
+    [reminders],
+  );
+
+  const oneOffReminders = useMemo(
+    () =>
+      reminders.filter(
+        (item) => item.kind === "one-off" && item.status === "active",
+      ),
+    [reminders],
+  );
+
+  const doneReminders = useMemo(
+    () => reminders.filter((item) => item.status === "done"),
+    [reminders],
+  );
+
+  const isSaveEnabled =
+    title.trim().length > 0 &&
+    (kind === "one-off" ? dueAt.length > 0 : recurringTime.length > 0);
+
+  const handleCreateReminder = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!sessionId || !title.trim() || !isCaretaker) return;
+
+    const payload: Record<string, unknown> = {
+      sessionId,
+      title: title.trim(),
+      type,
+      kind,
+      sourceText: title.trim(),
+    };
+
+    if (kind === "one-off") {
+      payload.dueAt = dueAt ? new Date(dueAt).toISOString() : null;
+    } else {
+      payload.recurringPattern = recurringPattern;
+      payload.recurringTime = recurringTime;
+      if (recurringPattern === "weekly") {
+        payload.recurringWeekday = recurringWeekday;
+      }
+    }
+
+    const response = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      setError(`Failed to create reminder (${response.status})`);
+      return;
+    }
+
+    setTitle("");
+    setDueAt("");
+    await loadReminders();
   };
 
-  const handleEdit = (reminder: Reminder) => {
-    setEditingReminder(reminder);
-    setShowSheet(true);
+  const markDone = async (reminderId: string) => {
+    const response = await fetch("/api/reminders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reminderId, action: "done" }),
+    });
+
+    if (!response.ok) {
+      setError(`Failed to update reminder (${response.status})`);
+      return;
+    }
+
+    await loadReminders();
   };
 
-  const handleAdd = () => {
-    setEditingReminder(null);
-    setShowSheet(true);
+  const startEditing = (reminder: ReminderItem) => {
+    if (!isCaretaker) return;
+    setEditingReminderId(reminder.id);
+    setEditTitle(reminder.title);
+    setEditDueAt(reminder.dueAt ? reminder.dueAt.slice(0, 16) : "");
+    setEditRecurringPattern(reminder.recurringPattern ?? "daily");
+    setEditRecurringTime(reminder.recurringTime ?? "09:00");
   };
 
-  const medications = reminders.filter((r) => r.type === "medication");
-  const general = reminders.filter((r) => r.type === "general");
+  const cancelEditing = () => {
+    setEditingReminderId(null);
+    setEditTitle("");
+    setEditDueAt("");
+    setEditRecurringPattern("daily");
+    setEditRecurringTime("09:00");
+  };
 
-  if (!mounted) return null;
+  const saveEdit = async (reminder: ReminderItem) => {
+    if (!isCaretaker) return;
+
+    const updates: Record<string, unknown> = {
+      title: editTitle.trim() || reminder.title,
+    };
+    if (reminder.kind === "one-off") {
+      updates.dueAt = editDueAt ? new Date(editDueAt).toISOString() : null;
+    } else {
+      updates.recurringPattern = editRecurringPattern;
+      updates.recurringTime = editRecurringTime;
+    }
+
+    const response = await fetch("/api/reminders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reminderId: reminder.id,
+        action: "update",
+        updates,
+      }),
+    });
+
+    if (!response.ok) {
+      setError(`Failed to edit reminder (${response.status})`);
+      return;
+    }
+
+    cancelEditing();
+    await loadReminders();
+  };
+
+  const deleteReminder = async (reminderId: string) => {
+    if (!isCaretaker) return;
+
+    const response = await fetch(
+      `/api/reminders?reminderId=${encodeURIComponent(reminderId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    if (!response.ok) {
+      setError(`Failed to delete reminder (${response.status})`);
+      return;
+    }
+
+    await loadReminders();
+  };
 
   return (
-    <div className="h-[100dvh] overflow-y-auto bg-cream-50 pt-24 px-5 pb-28">
-      <div className="max-w-md mx-auto space-y-5">
-        <h1 className="text-2xl font-bold text-navy">
-          {t("reminders.title") ?? "Reminders"}
-        </h1>
+    <div className="h-screen bg-cream-50 pt-24 px-3 pb-24 overflow-y-auto">
+      <div className="glass-heavy rounded-2xl p-6 w-[80vw] max-w-5xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-navy">{t("reminders.title")}</h1>
 
-        {/* Medications Section */}
-        {medications.length > 0 && (
-          <div className="glass-heavy rounded-2xl p-5">
-            <h2 className="text-sm font-bold text-navy/50 mb-3 flex items-center gap-2">
-              <span>💊</span>
-              {t("reminders.medications") ?? "Medications"}
-            </h2>
-            <ul className="space-y-2">
-              {medications.map((r) => (
-                <li
-                  key={r.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                    r.taken ? "bg-sage/20" : "bg-warm-pink/10"
-                  }`}
-                >
-                  <button
-                    onClick={() => handleToggleTaken(r.id)}
-                    className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
-                      r.taken
-                        ? "bg-sage border-sage text-white"
-                        : "border-warm-pink"
-                    }`}
-                  >
-                    {r.taken && (
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-semibold text-sm ${r.taken ? "text-navy/40 line-through" : "text-navy"}`}>
-                      {r.text}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-navy/50">{r.time}</span>
-                      {r.dosage && (
-                        <span className="text-xs text-navy/40 bg-white/50 px-1.5 py-0.5 rounded-full">
-                          {r.dosage}
-                        </span>
-                      )}
-                      {r.frequency && (
-                        <span className="text-xs text-navy/40 bg-white/50 px-1.5 py-0.5 rounded-full">
-                          {r.frequency}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {isCaretaker && (
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        onClick={() => handleEdit(r)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-navy/30 hover:text-navy/60 active:scale-90 transition-all"
-                      >
-                        <EditIcon />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-navy/30 hover:text-warm-pink active:scale-90 transition-all"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* General Reminders Section */}
-        <div className="glass-heavy rounded-2xl p-5">
-          <h2 className="text-sm font-bold text-navy/50 mb-3 flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-teal inline-block" />
-            {t("reminders.general") ?? "General"}
-          </h2>
-          {general.length === 0 ? (
-            <p className="text-sm text-navy/40 font-semibold">No reminders</p>
-          ) : (
-            <ul className="space-y-2">
-              {general.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-white/30"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full bg-teal shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-navy">{r.text}</p>
-                    <p className="text-xs text-navy/50">{r.time}</p>
-                  </div>
-                  {isCaretaker && (
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        onClick={() => handleEdit(r)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-navy/30 hover:text-navy/60 active:scale-90 transition-all"
-                      >
-                        <EditIcon />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-navy/30 hover:text-warm-pink active:scale-90 transition-all"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      {/* FAB (caretaker only) */}
-      {isCaretaker && (
-        <button
-          onClick={handleAdd}
-          className="fixed bottom-24 right-5 w-14 h-14 rounded-full bg-teal text-white shadow-lg flex items-center justify-center active:scale-90 transition-transform z-40"
-          aria-label="Add reminder"
+        <form
+          onSubmit={handleCreateReminder}
+          className="rounded-xl bg-white/70 p-4 space-y-3"
         >
-          <PlusIcon />
-        </button>
-      )}
+          <h2 className="text-navy font-semibold">Add Reminder</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Reminder title"
+              className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+              required
+              disabled={!isCaretaker}
+            />
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as ReminderType)}
+              className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+              disabled={!isCaretaker}
+            >
+              <option value="general">General</option>
+              <option value="appointment">Appointment</option>
+              <option value="medication">Medication</option>
+            </select>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as ReminderKind)}
+              className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+              disabled={!isCaretaker}
+            >
+              <option value="one-off">One-off event</option>
+              <option value="recurring">Recurring</option>
+            </select>
 
-      {/* Add/Edit Sheet */}
-      {showSheet && (
-        <ReminderSheet
-          reminder={editingReminder}
-          onClose={() => { setShowSheet(false); setEditingReminder(null); }}
-          onSave={handleSave}
-        />
-      )}
+            {kind === "one-off" ? (
+              <input
+                type="datetime-local"
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+                className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+                required
+                disabled={!isCaretaker}
+              />
+            ) : (
+              <>
+                <select
+                  value={recurringPattern}
+                  onChange={(e) =>
+                    setRecurringPattern(e.target.value as RecurringPattern)
+                  }
+                  className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+                  disabled={!isCaretaker}
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+                <input
+                  type="time"
+                  value={recurringTime}
+                  onChange={(e) => setRecurringTime(e.target.value)}
+                  className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm"
+                  disabled={!isCaretaker}
+                />
+                {recurringPattern === "weekly" ? (
+                  <select
+                    value={recurringWeekday}
+                    onChange={(e) =>
+                      setRecurringWeekday(Number(e.target.value))
+                    }
+                    className="rounded-lg border border-navy/20 bg-white px-3 py-2 text-sm sm:col-span-2"
+                    disabled={!isCaretaker}
+                  >
+                    {WEEKDAY_OPTIONS.map((day) => (
+                      <option key={day.value} value={day.value}>
+                        {day.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={!isSaveEnabled || !isCaretaker}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${
+              isSaveEnabled && isCaretaker
+                ? "bg-pink-600"
+                : "bg-navy/30 cursor-not-allowed"
+            }`}
+          >
+            Save Reminder
+          </button>
+        </form>
+
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {loading ? (
+          <p className="text-sm text-navy/60">Loading reminders...</p>
+        ) : null}
+
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-navy">
+            Recurring Reminders
+          </h2>
+          <ReminderList
+            reminders={recurringReminders}
+            onDone={markDone}
+            onDelete={isCaretaker ? deleteReminder : undefined}
+            onEdit={isCaretaker ? startEditing : undefined}
+            editingReminderId={editingReminderId}
+            editTitle={editTitle}
+            editDueAt={editDueAt}
+            editRecurringPattern={editRecurringPattern}
+            editRecurringTime={editRecurringTime}
+            onEditTitle={setEditTitle}
+            onEditDueAt={setEditDueAt}
+            onEditRecurringPattern={setEditRecurringPattern}
+            onEditRecurringTime={setEditRecurringTime}
+            onCancelEdit={cancelEditing}
+            onSaveEdit={saveEdit}
+          />
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-navy">One-off Reminders</h2>
+          <ReminderList
+            reminders={oneOffReminders}
+            onDone={markDone}
+            onDelete={isCaretaker ? deleteReminder : undefined}
+            onEdit={isCaretaker ? startEditing : undefined}
+            editingReminderId={editingReminderId}
+            editTitle={editTitle}
+            editDueAt={editDueAt}
+            onEditTitle={setEditTitle}
+            onEditDueAt={setEditDueAt}
+            onEditRecurringPattern={setEditRecurringPattern}
+            onEditRecurringTime={setEditRecurringTime}
+            onCancelEdit={cancelEditing}
+            onSaveEdit={saveEdit}
+          />
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-navy">Completed</h2>
+          <ReminderList
+            reminders={doneReminders}
+            onDone={markDone}
+            hideDoneAction
+            onDelete={isCaretaker ? deleteReminder : undefined}
+            onEdit={isCaretaker ? startEditing : undefined}
+            editingReminderId={editingReminderId}
+            editTitle={editTitle}
+            editDueAt={editDueAt}
+            onEditTitle={setEditTitle}
+            onEditDueAt={setEditDueAt}
+            onEditRecurringPattern={setEditRecurringPattern}
+            onEditRecurringTime={setEditRecurringTime}
+            onCancelEdit={cancelEditing}
+            onSaveEdit={saveEdit}
+          />
+        </section>
+      </div>
     </div>
   );
 }
 
-// ── Add/Edit Sheet ──
-function ReminderSheet({
-  reminder,
-  onClose,
-  onSave,
+function ReminderList({
+  reminders,
+  onDone,
+  onDelete,
+  onEdit,
+  editingReminderId,
+  editTitle,
+  editDueAt,
+  editRecurringPattern,
+  editRecurringTime,
+  onEditTitle,
+  onEditDueAt,
+  onEditRecurringPattern,
+  onEditRecurringTime,
+  onSaveEdit,
+  onCancelEdit,
+  hideDoneAction = false,
 }: {
-  reminder: Reminder | null;
-  onClose: () => void;
-  onSave: (r: Reminder) => void;
+  reminders: ReminderItem[];
+  onDone: (reminderId: string) => void;
+  onDelete?: (reminderId: string) => void;
+  onEdit?: (reminder: ReminderItem) => void;
+  editingReminderId?: string | null;
+  editTitle?: string;
+  editDueAt?: string;
+  editRecurringPattern?: RecurringPattern;
+  editRecurringTime?: string;
+  onEditTitle?: (value: string) => void;
+  onEditDueAt?: (value: string) => void;
+  onEditRecurringPattern?: (value: RecurringPattern) => void;
+  onEditRecurringTime?: (value: string) => void;
+  onSaveEdit?: (reminder: ReminderItem) => void;
+  onCancelEdit?: () => void;
+  hideDoneAction?: boolean;
 }) {
-  const { t } = useLanguage();
-  const isEditing = !!reminder;
-
-  const [text, setText] = useState(reminder?.text ?? "");
-  const [time, setTime] = useState(reminder?.time ?? "9:00 AM");
-  const [type, setType] = useState<ReminderType>(reminder?.type ?? "general");
-  const [dosage, setDosage] = useState(reminder?.dosage ?? "");
-  const [frequency, setFrequency] = useState(reminder?.frequency ?? "Daily");
-
-  const handleSave = () => {
-    if (!text.trim()) return;
-    onSave({
-      id: reminder?.id ?? `r-${Date.now()}`,
-      text: text.trim(),
-      time,
-      type,
-      dosage: type === "medication" ? dosage.trim() || undefined : undefined,
-      frequency: type === "medication" ? frequency : undefined,
-      taken: reminder?.taken ?? false,
-    });
-  };
+  if (reminders.length === 0) {
+    return <p className="text-sm text-navy/60">No reminders yet.</p>;
+  }
 
   return (
-    <>
-      <div
-        className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-50"
-        onClick={onClose}
-      />
-      <div className="fixed inset-x-0 bottom-0 z-50 animate-[fade-in-up_0.3s_ease-out]">
-        <div
-          className="glass-heavy rounded-t-3xl px-6 pt-5 pb-8 max-w-md mx-auto"
-          style={{ background: "rgba(255,248,240,0.95)", backdropFilter: "blur(30px)" }}
-        >
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-lg font-bold text-navy">
-              {isEditing
-                ? (t("reminders.edit") ?? "Edit Reminder")
-                : (t("reminders.add") ?? "New Reminder")}
-            </h3>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-navy/40 active:bg-navy/10 transition-colors"
-            >
-              <CloseIcon />
-            </button>
-          </div>
+    <ul className="space-y-3 pr-2">
+      {reminders.map((reminder) => {
+        const scheduleText =
+          reminder.kind === "one-off"
+            ? reminder.dueAt
+              ? new Date(reminder.dueAt).toLocaleString()
+              : "No date/time"
+            : reminder.recurringPattern === "weekly"
+              ? `Weekly (${weekdayLabel(reminder.recurringWeekday)}) at ${reminder.recurringTime ?? "09:00"}`
+              : `Daily at ${reminder.recurringTime ?? "09:00"}`;
 
-          <div className="space-y-4">
-            {/* Type */}
-            <div>
-              <label className="text-xs font-bold text-navy/50 mb-1.5 block">
-                {t("reminders.type") ?? "Type"}
-              </label>
-              <div className="flex gap-2">
-                {(["general", "medication"] as ReminderType[]).map((tp) => (
-                  <button
-                    key={tp}
-                    onClick={() => setType(tp)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
-                      type === tp
-                        ? "bg-teal text-white shadow-sm"
-                        : "bg-white/50 text-navy/50 border border-navy/10"
-                    }`}
-                  >
-                    {tp === "general" ? "General" : "Medication"}
-                  </button>
-                ))}
-              </div>
-            </div>
+        const extracted = reminder.sourceText !== reminder.title;
+        const isEditing = editingReminderId === reminder.id;
 
-            {/* Title */}
-            <div>
-              <label className="text-xs font-bold text-navy/50 mb-1.5 block">
-                {t("reminders.name") ?? "Name"}
-              </label>
-              <input
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="e.g. Take blood pressure medication"
-                className="w-full px-4 py-3 rounded-xl bg-white/60 border border-navy/10 text-sm font-semibold text-navy placeholder:text-navy/30 outline-none focus:border-teal transition-colors"
-              />
-            </div>
-
-            {/* Time */}
-            <div>
-              <label className="text-xs font-bold text-navy/50 mb-1.5 block">
-                {t("reminders.time") ?? "Time"}
-              </label>
-              <input
-                type="text"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                placeholder="e.g. 8:00 AM"
-                className="w-full px-4 py-3 rounded-xl bg-white/60 border border-navy/10 text-sm font-semibold text-navy placeholder:text-navy/30 outline-none focus:border-teal transition-colors"
-              />
-            </div>
-
-            {/* Medication-specific fields */}
-            {type === "medication" && (
-              <>
-                <div>
-                  <label className="text-xs font-bold text-navy/50 mb-1.5 block">
-                    {t("reminders.dosage") ?? "Dosage"}
-                  </label>
+        return (
+          <li
+            key={reminder.id}
+            className="rounded-xl border border-navy/10 bg-white/80 p-3 flex flex-col gap-2"
+          >
+            {isEditing ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={editTitle}
+                  onChange={(e) => onEditTitle?.(e.target.value)}
+                  className="rounded-lg border border-navy/20 px-2 py-1"
+                />
+                {reminder.kind === "one-off" ? (
                   <input
-                    type="text"
-                    value={dosage}
-                    onChange={(e) => setDosage(e.target.value)}
-                    placeholder="e.g. 1 tablet, 5ml"
-                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-navy/10 text-sm font-semibold text-navy placeholder:text-navy/30 outline-none focus:border-teal transition-colors"
+                    type="datetime-local"
+                    value={editDueAt}
+                    onChange={(e) => onEditDueAt?.(e.target.value)}
+                    className="rounded-lg border border-navy/20 px-2 py-1"
                   />
+                ) : (
+                  <>
+                    <select
+                      value={editRecurringPattern}
+                      onChange={(e) =>
+                        onEditRecurringPattern?.(
+                          e.target.value as RecurringPattern,
+                        )
+                      }
+                      className="rounded-lg border border-navy/20 px-2 py-1"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                    <input
+                      type="time"
+                      value={editRecurringTime}
+                      onChange={(e) => onEditRecurringTime?.(e.target.value)}
+                      className="rounded-lg border border-navy/20 px-2 py-1"
+                    />
+                  </>
+                )}
+                <div className="flex gap-2 sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => onSaveEdit?.(reminder)}
+                    className="rounded-md bg-navy px-2 py-1 text-xs text-white"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelEdit}
+                    className="rounded-md border border-navy/20 px-2 py-1 text-xs text-navy"
+                  >
+                    Cancel
+                  </button>
                 </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <label className="text-xs font-bold text-navy/50 mb-1.5 block">
-                    {t("reminders.frequency") ?? "Frequency"}
-                  </label>
-                  <div className="flex gap-2">
-                    {["Daily", "Twice daily", "Weekly"].map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setFrequency(f)}
-                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                          frequency === f
-                            ? "bg-teal text-white shadow-sm"
-                            : "bg-white/50 text-navy/50 border border-navy/10"
-                        }`}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="font-semibold text-sm text-navy">
+                    {reminder.title}
+                  </p>
+                  <p className="text-xs text-navy/60">{scheduleText}</p>
+                  <p className="text-xs text-navy/50 mt-1">
+                    {extracted
+                      ? "Extracted from conversation"
+                      : "Added manually"}
+                  </p>
                 </div>
-              </>
+                <div className="flex flex-wrap gap-2">
+                  {!hideDoneAction && reminder.status === "active" ? (
+                    <button
+                      type="button"
+                      onClick={() => onDone(reminder.id)}
+                      className="rounded-md border border-navy/20 px-2 py-1 text-xs text-navy"
+                    >
+                      Mark done
+                    </button>
+                  ) : null}
+                  {onEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => onEdit(reminder)}
+                      className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-700"
+                    >
+                      Edit
+                    </button>
+                  ) : null}
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(reminder.id)}
+                      className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             )}
-
-            {/* Save */}
-            <button
-              onClick={handleSave}
-              disabled={!text.trim()}
-              className={`w-full py-3.5 rounded-2xl text-base font-bold text-white transition-all active:scale-[0.98] ${
-                text.trim() ? "bg-teal shadow-sm" : "bg-navy/20"
-              }`}
-            >
-              {isEditing ? (t("reminders.save") ?? "Save") : (t("reminders.add") ?? "Add Reminder")}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
+          </li>
+        );
+      })}
+    </ul>
   );
+}
+
+function weekdayLabel(value: number | null): string {
+  if (value === null) return "selected day";
+  const found = WEEKDAY_OPTIONS.find((item) => item.value === value);
+  return found?.label ?? "selected day";
 }
