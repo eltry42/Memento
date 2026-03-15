@@ -1,3 +1,4 @@
+import GlobalReminderPopup from "@/components/navigation/GlobalReminderPopup";
 import TopNavBar from "@/components/navigation/TopNavBar";
 import AvatarStateMachineProvider from "@/components/avatar/AvatarStateMachine";
 import { BackgroundProvider } from "@/hooks/useBackground";
@@ -17,6 +18,7 @@ export default function MainLayout({
           <AvatarProvider>
             <AvatarStateMachineProvider>
               <TopNavBar />
+              <GlobalReminderPopup />
               {children}
             </AvatarStateMachineProvider>
           </AvatarProvider>

@@ -64,7 +64,10 @@ function getMoodLabel(key: string): string {
 // ── Component ──
 export default function DashboardPage() {
   const { t } = useLanguage();
-  const { notifications, dismiss, dismissAll } = useNotifications();
+  const { notifications, dismiss, dismissAll } = useNotifications({
+    includeDueReminders: false,
+    includeLocalNotifications: true,
+  });
   const [mounted, setMounted] = useState(false);
   const [mood, setMood] = useState<MoodEntry | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);

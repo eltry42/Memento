@@ -38,6 +38,7 @@ interface DueReminderNotification {
 
 interface UseNotificationsOptions {
   includeDueReminders?: boolean;
+  includeLocalNotifications?: boolean;
   markDueRemindersNotified?: boolean;
 }
 
@@ -161,13 +162,14 @@ async function fetchDueReminderNotifications(
 
 export function useNotifications(options?: UseNotificationsOptions) {
   const includeDueReminders = options?.includeDueReminders ?? true;
+  const includeLocalNotifications = options?.includeLocalNotifications ?? true;
   const markDueRemindersNotified = options?.markDueRemindersNotified ?? false;
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
-    const local = generateLocalNotifications();
+    const local = includeLocalNotifications ? generateLocalNotifications() : [];
 
     let reminderNotifications: AppNotification[] = [];
     if (includeDueReminders) {
@@ -188,7 +190,7 @@ export function useNotifications(options?: UseNotificationsOptions) {
     const currentDismissed = getDismissed();
     setDismissed(currentDismissed);
     setNotifications(all.filter((n) => !currentDismissed.has(n.id)));
-  }, [includeDueReminders, markDueRemindersNotified]);
+  }, [includeDueReminders, includeLocalNotifications, markDueRemindersNotified]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
