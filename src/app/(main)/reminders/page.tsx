@@ -96,11 +96,6 @@ export default function RemindersPage() {
     event.preventDefault();
     if (!sessionId || !title.trim()) return;
 
-    if (kind === "one-off" && !dueAt) {
-      setError("Please select date and time for one-off reminders.");
-      return;
-    }
-
     const payload: Record<string, unknown> = {
       sessionId,
       title: title.trim(),
@@ -119,24 +114,14 @@ export default function RemindersPage() {
       }
     }
 
-    let response = await fetch("/api/reminders", {
+    const response = await fetch("/api/reminders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    // MVP fallback for environments/proxies that reject POST on route handlers.
-    if (response.status === 405) {
-      response = await fetch("/api/reminders", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
-
     if (!response.ok) {
-      const text = await response.text();
-      setError(`Failed to create reminder (${response.status}): ${text || "unknown error"}`);
+      setError(`Failed to create reminder (${response.status})`);
       return;
     }
 
@@ -154,22 +139,6 @@ export default function RemindersPage() {
 
     if (!response.ok) {
       setError(`Failed to update reminder (${response.status})`);
-      return;
-    }
-
-    await loadReminders();
-  };
-
-  const deleteCompleted = async (reminderId: string) => {
-    const response = await fetch("/api/reminders", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reminderId }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      setError(`Failed to delete reminder (${response.status}): ${text || "unknown error"}`);
       return;
     }
 
@@ -273,12 +242,7 @@ export default function RemindersPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-navy mb-2">Completed</h2>
-          <ReminderList
-            reminders={doneReminders}
-            onDone={markDone}
-            onDelete={deleteCompleted}
-            hideDoneAction
-          />
+          <ReminderList reminders={doneReminders} onDone={markDone} hideDoneAction />
         </section>
       </div>
     </div>
@@ -288,12 +252,10 @@ export default function RemindersPage() {
 function ReminderList({
   reminders,
   onDone,
-  onDelete,
   hideDoneAction = false,
 }: {
   reminders: ReminderItem[];
   onDone: (reminderId: string) => void;
-  onDelete?: (reminderId: string) => void;
   hideDoneAction?: boolean;
 }) {
   if (reminders.length === 0) {
@@ -326,26 +288,15 @@ function ReminderList({
                 {extracted ? "Extracted from conversation" : "Added manually"}
               </p>
             </div>
-            <div className="flex gap-2">
-              {!hideDoneAction && reminder.status === "active" ? (
-                <button
-                  type="button"
-                  onClick={() => onDone(reminder.id)}
-                  className="rounded-md border border-navy/20 px-2 py-1 text-xs text-navy"
-                >
-                  Mark done
-                </button>
-              ) : null}
-              {hideDoneAction && onDelete ? (
-                <button
-                  type="button"
-                  onClick={() => onDelete(reminder.id)}
-                  className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600"
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
+            {!hideDoneAction && reminder.status === "active" ? (
+              <button
+                type="button"
+                onClick={() => onDone(reminder.id)}
+                className="rounded-md border border-navy/20 px-2 py-1 text-xs text-navy"
+              >
+                Mark done
+              </button>
+            ) : null}
           </li>
         );
       })}
