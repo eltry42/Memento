@@ -1,0 +1,99 @@
+{
+  "conversations": [],
+  "reminders": [
+    {
+      "id": "rem_1773560923656_0z4cva",
+      "sessionId": "test",
+      "type": "general",
+      "title": "Test reminder",
+      "sourceText": "Test reminder",
+      "dueAt": "2026-03-16T10:00:00.000Z",
+      "recurringPattern": null,
+      "recurringTime": null,
+      "recurringWeekday": null,
+      "status": "active",
+      "createdAt": "2026-03-15T07:48:43.656Z"
+    },
+    {
+      "id": "rem_1773562152014_5wfyx5",
+      "sessionId": "session-12345",
+      "type": "general",
+      "title": "Buy milk",
+      "sourceText": "Buy milk",
+      "dueAt": "2026-03-16T15:00:00.000Z",
+      "recurringPattern": null,
+      "recurringTime": null,
+      "recurringWeekday": null,
+      "status": "active",
+      "createdAt": "2026-03-15T08:09:12.013Z"
+    },
+    {
+      "id": "rem_1773562259041_wks102",
+      "sessionId": "session-abc",
+      "kind": "one-off",
+      "type": "general",
+      "title": "Check mail",
+      "sourceText": "Check mail",
+      "dueAt": "2026-03-16T12:00:00.000Z",
+      "recurringPattern": null,
+      "recurringTime": null,
+      "recurringWeekday": null,
+      "status": "active",
+      "createdAt": "2026-03-15T08:10:59.041Z"
+    },
+    {
+      "id": "rem_1773563772446_rt8fyk",
+      "sessionId": "session-abc",
+      "kind": "recurring",
+      "type": "general",
+      "title": "Test big edited",
+      "sourceText": "Test big",
+      "dueAt": null,
+      "recurringPattern": "weekly",
+      "recurringTime": "11:00",
+      "recurringWeekday": null,
+      "status": "active",
+      "createdAt": "2026-03-15T08:36:12.446Z"
+    },
+    {
+      "id": "rem_1773570375044_1cvmoy",
+      "sessionId": "test",
+      "kind": "one-off",
+      "type": "general",
+      "title": "Due now test",
+      "sourceText": "Due now test",
+      "dueAt": "2026-03-15T10:20:00.000Z",
+      "recurringPattern": null,
+      "recurringTime": null,
+      "recurringWeekday": null,
+      "status": "active",
+      "notifiedOffsets": [
+        0,
+        1,
+        6,
+        12
+      ],
+      "lastNotifiedAt": null,
+      "createdAt": "2026-03-15T10:26:15.044Z"
+    },
+    {
+      "id": "rem_1773570424340_ymvm9k",
+      "sessionId": "test",
+      "kind": "one-off",
+      "type": "general",
+      "title": "Offset test",
+      "sourceText": "Offset test",
+      "dueAt": "2026-03-15T10:40:00.000Z",
+      "recurringPattern": null,
+      "recurringTime": null,
+      "recurringWeekday": null,
+      "status": "active",
+      "notifiedOffsets": [
+        6,
+        12
+      ],
+      "lastNotifiedAt": null,
+      "createdAt": "2026-03-15T10:27:04.340Z"
+    }
+  ]
+}
