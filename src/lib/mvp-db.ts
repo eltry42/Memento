@@ -333,6 +333,37 @@ export interface DueReminderNotificationItem {
   offsetHours: 12 | 6 | 1 | 0;
 }
 
+type ReminderSchedulingShape = Pick<
+  ReminderItem,
+  | "kind"
+  | "dueAt"
+  | "recurringPattern"
+  | "recurringTime"
+  | "recurringWeekday"
+  | "notifiedOffsets"
+  | "lastNotifiedAt"
+>;
+
+function normalizeReminderForScheduling(
+  reminder: Partial<ReminderItem>,
+): ReminderSchedulingShape {
+  const inferredKind: ReminderItem["kind"] = reminder.kind
+    ? reminder.kind
+    : reminder.recurringTime || reminder.recurringPattern
+      ? "recurring"
+      : "one-off";
+
+  return {
+    kind: inferredKind,
+    dueAt: reminder.dueAt ?? null,
+    recurringPattern: reminder.recurringPattern ?? null,
+    recurringTime: reminder.recurringTime ?? null,
+    recurringWeekday: reminder.recurringWeekday ?? null,
+    notifiedOffsets: reminder.notifiedOffsets ?? [],
+    lastNotifiedAt: reminder.lastNotifiedAt ?? null,
+  };
+}
+
 function isSameDay(value: string | null, compareDate: Date): boolean {
   if (!value) return false;
   const parsed = new Date(value);
@@ -353,15 +384,17 @@ export function getDueReminderNotifications(
   const oneOffOffsets: Array<12 | 6 | 1 | 0> = [12, 6, 1, 0];
 
   for (const reminder of db.reminders) {
+    const normalized = normalizeReminderForScheduling(reminder);
+
     if (reminder.sessionId !== sessionId) continue;
     if (reminder.status === "done") continue;
 
-    if (reminder.kind === "one-off" && reminder.dueAt) {
-      const dueDate = new Date(reminder.dueAt);
+    if (normalized.kind === "one-off" && normalized.dueAt) {
+      const dueDate = new Date(normalized.dueAt);
       if (Number.isNaN(dueDate.getTime())) continue;
 
       for (const offset of oneOffOffsets) {
-        if (reminder.notifiedOffsets?.includes(offset)) continue;
+        if (normalized.notifiedOffsets.includes(offset)) continue;
 
         const dueAtTimestamp = dueDate.getTime() - offset * 60 * 60 * 1000;
         if (now.getTime() >= dueAtTimestamp) {
@@ -379,26 +412,26 @@ export function getDueReminderNotifications(
     }
 
     if (
-      reminder.kind === "recurring" &&
-      reminder.recurringTime &&
+      normalized.kind === "recurring" &&
+      normalized.recurringTime &&
       reminder.status !== "done"
     ) {
-      const [hours, minutes] = reminder.recurringTime.split(":").map(Number);
+      const [hours, minutes] = normalized.recurringTime.split(":").map(Number);
       if (Number.isNaN(hours) || Number.isNaN(minutes)) continue;
 
       const scheduled = new Date(now);
       scheduled.setHours(hours, minutes, 0, 0);
       scheduled.setMilliseconds(0);
 
-      if (reminder.recurringPattern === "weekly") {
-        if (reminder.recurringWeekday == null) continue;
-        if (scheduled.getDay() !== reminder.recurringWeekday) {
+      if (normalized.recurringPattern === "weekly") {
+        if (normalized.recurringWeekday == null) continue;
+        if (scheduled.getDay() !== normalized.recurringWeekday) {
           continue;
         }
       }
 
       if (now.getTime() < scheduled.getTime()) continue;
-      if (isSameDay(reminder.lastNotifiedAt ?? null, scheduled)) continue;
+      if (isSameDay(normalized.lastNotifiedAt, scheduled)) continue;
 
       notifications.push({
         reminderId: reminder.id,
