@@ -9,6 +9,7 @@ import { ConversationMessage } from "@/types/conversation";
 import { GREETING_TEXT } from "@/lib/mock-data";
 import { VAD_REDEMPTION_MS } from "@/lib/constants";
 import { useLanguage } from "@/hooks/useLanguage";
+import { getOrCreateSessionId } from "@/lib/client-session";
 
 interface UseRealConversationOptions {
   dispatch: (event: AvatarEvent) => void; // sends action command
@@ -23,6 +24,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [bubbleText, setBubbleText] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [summary, setSummary] = useState<string>("No summary yet.");
+  const [sessionId] = useState<string>(() => getOrCreateSessionId());
   const greetingDone = useRef(false);
   const greetingPlaybackAttemptedRef = useRef(false);
   const completionModeRef = useRef<"audio" | "bubble">("bubble");
@@ -46,7 +48,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
 
       dispatch({ type: "SPEAKING_DONE" });
     },
-    [dispatch]
+    [dispatch],
   );
 
   const cleanupAudio = useCallback(() => {
@@ -125,7 +127,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         }
       }
     },
-    [cleanupAudio, finishAssistantSpeech, language]
+    [cleanupAudio, finishAssistantSpeech, language],
   );
 
   // Load summary from LocalStorage on mount
@@ -145,7 +147,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         {
           id: nextMessageId(),
           role: "assistant",
-          text: GREETING_TEXT, // TODO: vary the greeting based on time of day or randomly select from a list
+          text: GREETING_TEXT,
           timestamp: Date.now(),
         },
       ]);
@@ -157,9 +159,26 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     return () => clearTimeout(timer);
   }, [dispatch]);
 
+  const addAssistantMessage = useCallback(
+    (text: string) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextMessageId(),
+          role: "assistant",
+          text,
+          timestamp: Date.now(),
+        },
+      ]);
+      setBubbleText(text);
+      dispatch({ type: "START_SPEAKING", text });
+    },
+    [dispatch],
+  );
+
   const vad = useMicVAD({
     startOnLoad: false,
-    redemptionMs: VAD_REDEMPTION_MS, // waiting time when user not speaking before cutting off mic
+    redemptionMs: VAD_REDEMPTION_MS,
 
     baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web/dist/",
     onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/",
@@ -170,33 +189,30 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
       completionModeRef.current = "bubble";
       activeSpeechKindRef.current = null;
 
-      // When user start talking, clear the output bubble and show listening state
       setBubbleText("");
       dispatch({ type: "START_LISTENING" });
     },
 
     onSpeechEnd: async (audio) => {
       console.log("[VAD] Speech ended! Starting processing...");
-      vad.pause(); // pause microphone
-      // User stopped talking
+      vad.pause();
       dispatch({ type: "STOP_LISTENING" });
       dispatch({ type: "START_THINKING" });
-      setBubbleText("..."); // SHOULD show three dots immediately
+      setBubbleText("...");
 
       try {
-        // Convert raw Float32Array audio into a WAV Blob
         const wavBuffer = utils.encodeWAV(audio);
         const audioBlob = new Blob([wavBuffer], { type: "audio/wav" });
 
-        // Package the Blob into FormData so we can send it over HTTP
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording.wav");
-        formData.append("history", JSON.stringify(messages)); // store entire convo history
-        formData.append("summary", summary); // send current summary to backend for context
+        formData.append("history", JSON.stringify(messages));
+        formData.append("summary", summary);
 
-        console.log("Sending audio, previous convo history, and summary to backend for processing...");
+        console.log(
+          "Sending audio, previous convo history, and summary to backend for processing...",
+        );
 
-        // Send the POST request to your Next.js backend
         const response = await fetch("/api/process-audio", {
           method: "POST",
           body: formData,
@@ -207,16 +223,19 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         }
 
         const data = await response.json();
-        // extract specific fields
         const userTranscript = data.userText;
         const aiReply = data.aiText;
-        
-        // Update summary if provided by backend
+
         if (data.summary) {
           setSummary(data.summary);
-          localStorage.setItem("memento_summary", data.summary); // persist summary in LocalStorage
-          console.log("Updated summary received from backend:\n", data.summary, "\n-------------------");
+          localStorage.setItem("memento_summary", data.summary);
+          console.log(
+            "Updated summary received from backend:\n",
+            data.summary,
+            "\n-------------------",
+          );
         }
+
         setMessages((prev) => [
           ...prev,
           {
@@ -235,15 +254,14 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
 
         setBubbleText(aiReply);
 
-        // stop thinking and start speaking real text
-        dispatch({ type: "START_SPEAKING", text: aiReply});
+        dispatch({ type: "START_SPEAKING", text: aiReply });
         void playAssistantAudio(aiReply, "speaking");
       } catch (error) {
         console.error("Server request failed", error);
         setBubbleText(
           "I'm sorry, I couldn't process your voice right now. Please try speaking again.",
         );
-        dispatch({ type: "SPEAKING_DONE" }); // Reset the avatar
+        dispatch({ type: "SPEAKING_DONE" });
       }
     },
   });
@@ -262,11 +280,10 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     if (vad.listening) {
       vad.pause();
     } else {
-      vad.start(); // start browser mic
+      vad.start();
     }
   }, [bubbleText, playAssistantAudio, vad]);
 
-  // Same cleanup callbacks so HomeScreen doesn't break
   const handleGreetingComplete = useCallback(() => {
     if (
       completionModeRef.current === "bubble" &&
@@ -305,12 +322,13 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     };
   }, [cleanupAudio]);
 
-  // Return the EXACT same shape as the mock hook
   return {
     bubbleText,
     messages,
+    sessionId,
     handleMicPress,
     handleGreetingComplete,
     handleSpeakingComplete,
+    addAssistantMessage,
   };
 }

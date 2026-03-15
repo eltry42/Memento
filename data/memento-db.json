@@ -94,6 +94,54 @@
       ],
       "lastNotifiedAt": null,
       "createdAt": "2026-03-15T10:27:04.340Z"
+    },
+    {
+      "id": "rem_1773577830304_fbtszs",
+      "sessionId": "session-1773577777613-j3yqj6",
+      "kind": "recurring",
+      "type": "general",
+      "title": "w",
+      "sourceText": "w",
+      "dueAt": null,
+      "recurringPattern": "daily",
+      "recurringTime": "22:03",
+      "recurringWeekday": null,
+      "status": "done",
+      "notifiedOffsets": [],
+      "lastNotifiedAt": "2026-03-15T14:03:00.000Z",
+      "createdAt": "2026-03-15T12:30:30.304Z"
+    },
+    {
+      "id": "rem_1773584169527_kmw79q",
+      "sessionId": "session-1773577777613-j3yqj6",
+      "kind": "recurring",
+      "type": "general",
+      "title": "ewq",
+      "sourceText": "ewq",
+      "dueAt": null,
+      "recurringPattern": "daily",
+      "recurringTime": "22:22",
+      "recurringWeekday": null,
+      "status": "active",
+      "notifiedOffsets": [],
+      "lastNotifiedAt": "2026-03-15T14:22:00.000Z",
+      "createdAt": "2026-03-15T14:16:09.527Z"
+    },
+    {
+      "id": "rem_1773584625563_9jpja0",
+      "sessionId": "session-1773577777613-j3yqj6",
+      "kind": "recurring",
+      "type": "general",
+      "title": "e",
+      "sourceText": "e",
+      "dueAt": null,
+      "recurringPattern": "daily",
+      "recurringTime": "23:08",
+      "recurringWeekday": null,
+      "status": "active",
+      "notifiedOffsets": [],
+      "lastNotifiedAt": "2026-03-15T15:08:00.000Z",
+      "createdAt": "2026-03-15T14:23:45.563Z"
     }
   ]
 }
