@@ -20,6 +20,25 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## MVP Conversation + Reminder Storage
+
+For quick hackathon testing, this repo now includes a lightweight file-backed database at `data/memento-db.json`.
+
+- `POST /api/process-audio` now stores each user + assistant exchange and auto-extracts reminder candidates.
+- `GET /api/conversation?sessionId=<id>` returns saved conversation history.
+- `GET /api/reminders?sessionId=<id>` returns all reminders (recurring + one-off).
+- `POST /api/reminders` creates manual reminders (`one-off` or `recurring`).
+- `GET /api/reminders?sessionId=<id>&dueOnly=true&markNotified=true` returns due notification events and marks each notification checkpoint as sent.
+- `PATCH /api/reminders` with `{ "reminderId": "...", "action": "done" }` marks a reminder as done.
+
+Reminder delivery MVP:
+- Reminders tab has two sections: recurring reminders and one-off reminders.
+- One-off events trigger in-app/browser reminders at 12h, 6h, 1h, and at event time.
+- Recurring reminders (daily/weekly) trigger the same 12h/6h/1h/event checkpoints for each occurrence.
+- Home screen polls due reminder notifications every 30s.
+
+When recording audio from the frontend, include `sessionId` in the `FormData` to group records by user/session.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -47,3 +47,5 @@ Dog Animation/
 package-lock.json
 
 *.yaml
+# MVP local data store
+/data
