@@ -2,7 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
-export type Language = "en" | "zh" | "ta";
+export type Language = "en" | "zh" | "ta" | "ms";
 
 export interface LanguageOption {
   id: Language;
@@ -14,6 +14,7 @@ export const LANGUAGES: LanguageOption[] = [
   { id: "en", label: "English", shortLabel: "EN" },
   { id: "zh", label: "中文", shortLabel: "中文" },
   { id: "ta", label: "தமிழ்", shortLabel: "தமி" },
+  { id: "ms", label: "Bahasa Melayu", shortLabel: "BM" },
 ];
 
 const STORAGE_KEY = "memento-language";
@@ -349,6 +350,31 @@ export const translations: Record<Language, Record<string, string>> = {
     "month.6": "ஜூலை", "month.7": "ஆகஸ்ட்", "month.8": "செப்டம்பர்",
     "month.9": "அக்டோபர்", "month.10": "நவம்பர்", "month.11": "டிசம்பர்",
   },
+
+  ms: {
+    "nav.home": "Laman Utama",
+    "nav.wellness": "Kesejahteraan",
+    "nav.reminders": "Peringatan",
+    "nav.schedule": "Jadual",
+    "nav.settings": "Tetapan",
+
+    "home.chatLog": "Log Sembang",
+    "home.listening": "Sedang mendengar...",
+    "mic.startTalking": "Mula bercakap",
+    "mic.connecting": "Sedang menyambung...",
+    "mic.unmute": "Buka mikrofon",
+    "mic.mute": "Bisukan mikrofon",
+
+    "onboarding.welcome.tagline": "Teman Mesra Anda",
+    "onboarding.welcome.chooseLanguage": "Pilih bahasa",
+    "onboarding.welcome.continue": "Teruskan",
+    "onboarding.skip": "Langkau",
+    "onboarding.next": "Seterusnya",
+    "onboarding.getStarted": "Mula",
+
+    "settings.language": "Bahasa",
+  },
+
 };
 
 // ─── Context ─────────────────────────────────────────────

@@ -20,6 +20,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [vadListening, setVadListening] = useState(false);
   const [currentViseme, setCurrentViseme] = useState<string | null>(null);
   const visemeTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const bubbleWordTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   const greetingDone = useRef(false);
   const sessionIdRef = useRef(getOrCreateSessionId());
@@ -48,11 +49,13 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
     if (activeSourceRef.current) {
       try {
         activeSourceRef.current.stop();
-      } catch (e) {}
+      } catch {}
       activeSourceRef.current = null;
     }
     visemeTimeoutsRef.current.forEach(clearTimeout);
     visemeTimeoutsRef.current = [];
+    bubbleWordTimeoutsRef.current.forEach(clearTimeout);
+    bubbleWordTimeoutsRef.current = [];
     setCurrentViseme(null);
   }, []);
 
@@ -66,6 +69,51 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
       });
     },
     [dispatch],
+  );
+
+  const scheduleSyncedBubbleWords = useCallback(
+    (fullText: string, visemes: { characters?: string[]; character_start_times_seconds?: number[] } | null | undefined) => {
+      bubbleWordTimeoutsRef.current.forEach(clearTimeout);
+      bubbleWordTimeoutsRef.current = [];
+
+      if (!fullText) {
+        setBubbleText("");
+        return;
+      }
+
+      const characters = visemes?.characters ?? [];
+      const starts = visemes?.character_start_times_seconds ?? [];
+
+      if (!characters.length || !starts.length || characters.length !== starts.length) {
+        setBubbleText(fullText);
+        return;
+      }
+
+      const safeText = fullText.trim();
+      const wordMatches = Array.from(safeText.matchAll(/\S+/g));
+      if (!wordMatches.length) {
+        setBubbleText("");
+        return;
+      }
+
+      const revealSchedule = wordMatches
+        .map((match, index) => {
+          const startIndex = match.index ?? 0;
+          const wordStartTime = starts[startIndex] ?? starts[Math.min(index, starts.length - 1)] ?? 0;
+          return { index, wordStartTime };
+        })
+        .sort((a, b) => a.wordStartTime - b.wordStartTime);
+
+      setBubbleText("");
+
+      revealSchedule.forEach(({ index, wordStartTime }) => {
+        const timeout = setTimeout(() => {
+          setBubbleText(wordMatches.slice(0, index + 1).map((m) => m[0]).join(" "));
+        }, Math.max(0, wordStartTime * 1000));
+        bubbleWordTimeoutsRef.current.push(timeout);
+      });
+    },
+    [],
   );
 
   const playAssistantAudio = useCallback(
@@ -90,6 +138,8 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
 
         const data = await response.json();
         const { audio, visemes } = data;
+
+        scheduleSyncedBubbleWords(text, visemes);
 
         const audioObj = new Audio(`data:audio/mpeg;base64,${audio}`);
 
@@ -126,7 +176,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         finishAssistantSpeech(kind);
       }
     },
-    [cleanupAudio, finishAssistantSpeech, language],
+    [cleanupAudio, finishAssistantSpeech, language, scheduleSyncedBubbleWords],
   );
 
   // Single Effect for Initialization: Load Summary and Trigger Greeting
@@ -215,7 +265,6 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
               },
             ]);
 
-            setBubbleText(data.aiText);
             dispatchRef.current({ type: "START_SPEAKING", text: data.aiText });
             playAssistantAudio(data.aiText, "speaking");
           } catch (error) {
