@@ -71,7 +71,8 @@ export default function Avatar({ modelUrl, currentViseme, isSpeaking }: any) {
   }, [nodes]);
 
   useFrame((state) => {
-      if (currentVisemeRef.current) console.log("useFrame sees:", currentVisemeRef.current);
+    if (currentVisemeRef.current)
+      console.log("useFrame sees:", currentVisemeRef.current);
 
     const head = nodes.Wolf3D_Head;
     const teeth = nodes.Wolf3D_Teeth;
@@ -93,7 +94,7 @@ export default function Avatar({ modelUrl, currentViseme, isSpeaking }: any) {
 
     if (!head?.morphTargetInfluences || !head?.morphTargetDictionary) return;
 
-    // ✅ FIX: Read from ref, not prop
+    // Read from ref, not prop
     const visemeChar = currentVisemeRef.current;
 
     if (visemeChar) {
@@ -111,7 +112,7 @@ export default function Avatar({ modelUrl, currentViseme, isSpeaking }: any) {
         head.morphTargetInfluences[idx] = THREE.MathUtils.lerp(
           head.morphTargetInfluences[idx],
           0,
-          0.15, // ✅ Slower decay so mouth has time to open visibly
+          0.05, // ✅ Slower decay so mouth has time to open visibly
         );
       }
     });

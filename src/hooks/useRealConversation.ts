@@ -117,7 +117,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
                   if (playbackTokenRef.current === token) {
                     setCurrentViseme(null);
                   }
-                }, 120); // ~120ms open window per viseme
+                }, 180);
               }, startTime * 1000);
               visemeTimeoutsRef.current.push(timeout);
             },
