@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getConversationInstruction, getSummarizationInstruction } from "@/lib/prompts";
 import { getGuardrailResponse } from "@/lib/conversation-guardrails";
+import { generateWithGemini, isSingaporeRelatedQuestion } from "@/lib/gemini";
+
 const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_TRANSCRIPT_RETRIES = 10;
 
 // Helper to format history for the AI's instruction
 type ConversationMessage = { role: "user" | "assistant"; text: string };
-
 
 function parseHistory(raw: string | null): ConversationMessage[] {
   if (!raw) return [];
@@ -35,7 +36,7 @@ function parseHistory(raw: string | null): ConversationMessage[] {
 
 function compileConvoHistory(history: ConversationMessage[]) {
   if (!history || history.length === 0) return "No previous context.";
-  // Slice to keep only the last 6 messages to stay within token limits
+
   return history
     .slice(-NUMBER_OF_MESSAGES_TO_KEEP)
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
@@ -50,23 +51,24 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
-    const apiKey = process.env.MERALION_API_KEY;
+    const meralionApiKey = process.env.MERALION_API_KEY;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
     const currentSummary = (formData.get("summary") as string) || "";
 
     // Extract conversation history if sent
     const history = parseHistory(formData.get("history") as string | null);
 
-    if (!audioFile || !apiKey) {
+    if (!audioFile || !meralionApiKey) {
       return NextResponse.json(
-        { error: "Missing file or API key" },
+        { error: "Missing file or MERALION_API_KEY" },
         { status: 400 },
       );
     }
 
-    // STEP 1: Get the Presigned S3 URL, creates custom for us
+    // STEP 1: Get the Presigned S3 URL
     const urlResponse = await fetch("https://api.cr8lab.com/upload-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      headers: { "Content-Type": "application/json", "x-api-key": meralionApiKey },
       body: JSON.stringify({
         filename: "recording.wav",
         contentType: "audio/wav",
@@ -85,8 +87,7 @@ export async function POST(request: Request) {
 
     if (!uploadResponse.ok) throw new Error("S3 Upload Failed");
 
-    // --- HELPER: Retry Transcription (Wait for S3 to see the file) ---
-    // IMPROVEMENT TODO: can use exponential backoff -> increasing time delay between each iteration
+    // Transcription retry
     let userText = "";
     for (let i = 0; i < NUMBER_OF_TRANSCRIPT_RETRIES; i++) {
       console.log(
@@ -95,19 +96,19 @@ export async function POST(request: Request) {
 
       const transcribeRes = await fetch("https://api.cr8lab.com/transcribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-api-key": meralionApiKey },
         body: JSON.stringify({ key: s3Key }),
       });
 
       if (transcribeRes.ok) {
         const transcribeData = await transcribeRes.json();
         const rawText = transcribeData.response.text;
-        userText = rawText.replace(/<Speaker\s?\d+>:\s?/gi, "").trim(); // remove speaker tags if any
+        userText = rawText.replace(/<Speaker\s?\d+>:\s?/gi, "").trim();
         console.log("✅ Transcription successful:", userText);
         break;
       }
-      // Wait 1 second before retrying if file not found
-      if (i === 9) {
+
+      if (i === NUMBER_OF_TRANSCRIPT_RETRIES - 1) {
         throw new Error("Transcribing data failed");
       }
       console.log("File not found yet, waiting 1s...");
@@ -119,36 +120,68 @@ export async function POST(request: Request) {
     if (guardrailResponse) {
       console.log("Guardrail triggered for input:", userText);
       return NextResponse.json({
-        userText: userText,
+        userText,
         aiText: guardrailResponse,
         summary: currentSummary,
       });
     }
-    // --- STEP 3: Process the AI Response ---
-    const processResponse = await fetch("https://api.cr8lab.com/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({
-        key: s3Key,
-        instruction: getConversationInstruction(currentSummary, convoHistory, userText),
-      }),
-    });
-    console.log("Long-term summary sent to MERaLiON:\n", currentSummary, "\n-------------------");
-    console.log("Conversation history sent to MERaLiON:\n", convoHistory, "\n-------------------");
-    console.log("Latest user input sent to MERaLiON:\n", userText, "\n-------------------");
 
-    if (!processResponse.ok) throw new Error("MERaLiON processing failed");
-    const processData = await processResponse.json();
-    const aiText = processData.response.text;
+    const conversationInstruction = getConversationInstruction(
+      currentSummary,
+      convoHistory,
+      userText,
+    );
+
+    let meralionSupplement = "";
+    if (isSingaporeRelatedQuestion(userText)) {
+      const supplementResponse = await fetch("https://api.cr8lab.com/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": meralionApiKey },
+        body: JSON.stringify({
+          key: s3Key,
+          instruction: `${conversationInstruction}\n\nFocus especially on Singapore-specific cultural and factual context if relevant.`,
+        }),
+      });
+
+      if (supplementResponse.ok) {
+        const supplementData = await supplementResponse.json();
+        meralionSupplement = supplementData.response?.text?.trim() || "";
+      }
+    }
+
+    let aiText = "";
+    if (geminiApiKey) {
+      aiText = await generateWithGemini({
+        apiKey: geminiApiKey,
+        instruction: conversationInstruction,
+        userInput: userText,
+        supplement: meralionSupplement,
+      });
+    } else {
+      const processResponse = await fetch("https://api.cr8lab.com/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": meralionApiKey },
+        body: JSON.stringify({
+          key: s3Key,
+          instruction: conversationInstruction,
+        }),
+      });
+
+      if (!processResponse.ok) throw new Error("MERaLiON processing failed");
+      const processData = await processResponse.json();
+      aiText = processData.response.text;
+    }
+
+    if (!aiText) {
+      throw new Error("No AI response generated");
+    }
+
     let updatedSummary = currentSummary;
-    console.log("ASSISTANT REPLIED:", aiText);
-
-    console.log("Number of messages in history:", history.length);
 
     try {
       const summaryResponse = await fetch("https://api.cr8lab.com/process", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-api-key": meralionApiKey },
         body: JSON.stringify({
           key: s3Key,
           instruction: getSummarizationInstruction(
@@ -163,11 +196,11 @@ export async function POST(request: Request) {
     } catch {
       console.error("Summarization failed, keeping old summary.");
     }
- 
+
     return NextResponse.json({
-      userText: userText,
-      aiText: aiText,
-      summary: updatedSummary, // send back the potentially updated summary
+      userText,
+      aiText,
+      summary: updatedSummary,
     });
   } catch (error) {
     console.error("Audio Processing Error:", error);
