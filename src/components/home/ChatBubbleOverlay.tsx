@@ -62,7 +62,7 @@ export default function ChatBubbleOverlay({
           <SpeechBubble
             text={text}
             isVisible
-            typewriter
+            typewriter={false}
             onComplete={onSpeakingComplete}
           />
         )}
