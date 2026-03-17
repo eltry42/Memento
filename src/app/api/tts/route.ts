@@ -6,21 +6,33 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { text } = await request.json();
+    const { text, language } = await request.json();
+
+    const requestedLanguage =
+      typeof language === "string" ? language.toLowerCase() : "en";
 
     // 1. Get IDs from env
-    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    const voiceIdByLanguage: Record<string, string | undefined> = {
+      en: process.env.ELEVENLABS_VOICE_ID_EN,
+      zh: process.env.ELEVENLABS_VOICE_ID_ZH,
+      ta: process.env.ELEVENLABS_VOICE_ID_TA,
+      ms: process.env.ELEVENLABS_VOICE_ID_MS,
+    };
+
+    const voiceId =
+      voiceIdByLanguage[requestedLanguage] ?? process.env.ELEVENLABS_VOICE_ID;
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    const modelId = "eleven_multilingual_v2";
+    const modelId = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
 
     // --- LOOK AT YOUR TERMINAL FOR THESE LOGS ---
     console.log("--- ElevenLabs Request Start ---");
+    console.log("Language:", requestedLanguage);
     console.log("Voice ID being used:", voiceId);
     console.log("API Key found:", apiKey ? "Yes (starts with " + apiKey.slice(0, 4) + ")" : "No");
     console.log("--- End Log ---");
 
     if (!voiceId || voiceId === "undefined") {
-      return NextResponse.json({ error: "Voice ID is missing in .env.local" }, { status: 400 });
+      return NextResponse.json({ error: `Voice ID is missing for language: ${requestedLanguage}` }, { status: 400 });
     }
 
     const response = await fetch(
@@ -53,7 +65,8 @@ export async function POST(request: Request) {
       audio: data.audio_base64,
       visemes: data.alignment, 
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
