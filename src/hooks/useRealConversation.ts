@@ -13,10 +13,6 @@ interface UseRealConversationOptions {
   dispatch: (event: AvatarEvent) => void;
 }
 
-let messageIdCounter = 0;
-function nextMessageId() {
-  return `msg-${++messageIdCounter}`;
-}
 
 export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const [bubbleText, setBubbleText] = useState("");
@@ -187,13 +183,13 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
             setMessages((prev) => [
               ...prev,
               {
-                id: nextMessageId(),
+                id: crypto.randomUUID(),
                 role: "user",
                 text: data.userText,
                 timestamp: Date.now(),
               },
               {
-                id: nextMessageId(),
+                id: crypto.randomUUID(),
                 role: "assistant",
                 text: data.aiText,
                 timestamp: Date.now() + 1,
@@ -230,7 +226,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
       setBubbleText(GREETING_TEXT);
       setMessages([
         {
-          id: nextMessageId(),
+          id: crypto.randomUUID(), // Using UUID for unique message IDs
           role: "assistant",
           text: GREETING_TEXT,
           timestamp: Date.now(),
