@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import MicButton from "./MicButton";
 import PillButton from "@/components/ui/PillButton";
 import { SessionPhase } from "@/types/session";
@@ -49,6 +50,22 @@ export default function BottomControls({
   };
 
   const currentLang = LANGUAGES.find((l) => l.id === language)!;
+
+  useEffect(() => {
+    const syncTtsLanguage = async () => {
+      try {
+        await fetch("/api/tts", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ language: currentLang.id }),
+        });
+      } catch (error) {
+        console.error("Failed to sync TTS language", error);
+      }
+    };
+
+    void syncTtsLanguage();
+  }, [currentLang.id]);
 
   return (
     <div className="absolute bottom-0 left-0 right-0 safe-bottom">

@@ -1,40 +1,76 @@
 import { NextResponse } from "next/server";
 
+const voiceIdByLanguage: Record<string, string | undefined> = {
+  en: process.env.ELEVENLABS_VOICE_ID_EN,
+  zh: process.env.ELEVENLABS_VOICE_ID_ZH,
+  ta: process.env.ELEVENLABS_VOICE_ID_TA,
+  ms: process.env.ELEVENLABS_VOICE_ID_MS,
+};
+
+const modelIdByLanguage: Record<string, string | undefined> = {
+  en: process.env.ELEVENLABS_MODEL_ID_EN,
+  zh: process.env.ELEVENLABS_MODEL_ID_ZH,
+  ta: process.env.ELEVENLABS_MODEL_ID_TA,
+  ms: process.env.ELEVENLABS_MODEL_ID_MS,
+};
+
+let configuredLanguage = "en";
+
+function normalizeLanguage(language: unknown) {
+  const requestedLanguage =
+    typeof language === "string" ? language.toLowerCase() : configuredLanguage;
+  return requestedLanguage.split("-")[0];
+}
+
+function resolveVoiceAndModel(language: string) {
+  const voiceId = voiceIdByLanguage[language] ?? process.env.ELEVENLABS_VOICE_ID;
+  const modelId =
+    modelIdByLanguage[language] ||
+    process.env.ELEVENLABS_MODEL_ID ||
+    "eleven_multilingual_v2";
+
+  return { voiceId, modelId };
+}
+
 export async function GET() {
-  return NextResponse.json({ message: "Backend is ALIVE" });
+  const { voiceId, modelId } = resolveVoiceAndModel(configuredLanguage);
+
+  return NextResponse.json({
+    message: "Backend is ALIVE",
+    language: configuredLanguage,
+    modelId,
+    voiceId,
+  });
+}
+
+export async function PUT(request: Request) {
+  try {
+    const { language } = await request.json();
+    const normalizedLanguage = normalizeLanguage(language);
+
+    configuredLanguage = normalizedLanguage;
+    const { voiceId, modelId } = resolveVoiceAndModel(normalizedLanguage);
+
+    return NextResponse.json({
+      language: normalizedLanguage,
+      modelId,
+      voiceId,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const { text, language } = await request.json();
 
-    const requestedLanguage =
-      typeof language === "string" ? language.toLowerCase() : "en";
-    const normalizedLanguage = requestedLanguage.split("-")[0];
-
-    // 1. Get IDs from env
-    const voiceIdByLanguage: Record<string, string | undefined> = {
-      en: process.env.ELEVENLABS_VOICE_ID_EN,
-      zh: process.env.ELEVENLABS_VOICE_ID_ZH,
-      ta: process.env.ELEVENLABS_VOICE_ID_TA,
-      ms: process.env.ELEVENLABS_VOICE_ID_MS,
-    };
-
-    const voiceId =
-      voiceIdByLanguage[normalizedLanguage] ?? process.env.ELEVENLABS_VOICE_ID;
-
-    const modelIdByLanguage: Record<string, string | undefined> = {
-      en: process.env.ELEVENLABS_MODEL_ID_EN,
-      zh: process.env.ELEVENLABS_MODEL_ID_ZH,
-      ta: process.env.ELEVENLABS_MODEL_ID_TA,
-      ms: process.env.ELEVENLABS_MODEL_ID_MS,
-    };
+    const normalizedLanguage = normalizeLanguage(language);
+    const requestedLanguage = typeof language === "string" ? language.toLowerCase() : normalizedLanguage;
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    const modelId =
-      modelIdByLanguage[normalizedLanguage] ||
-      process.env.ELEVENLABS_MODEL_ID ||
-      "eleven_multilingual_v2";
+    const { voiceId, modelId } = resolveVoiceAndModel(normalizedLanguage);
 
     // --- LOOK AT YOUR TERMINAL FOR THESE LOGS ---
     console.log("--- ElevenLabs Request Start ---");
