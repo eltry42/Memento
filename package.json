@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.20",
+    "@met4citizen/talkinghead": "github:met4citizen/TalkingHead",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@ricky0123/vad-react": "^0.0.36",
     "@ricky0123/vad-web": "^0.0.30",
     "@types/three": "^0.183.1",
+    "buffer": "^6.0.3",
     "livekit-client": "^2.17.2",
     "livekit-server-sdk": "^2.15.0",
     "next": "16.1.6",

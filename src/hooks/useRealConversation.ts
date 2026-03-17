@@ -101,7 +101,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
 
         const source = ctx.createBufferSource();
         const newAnalyser = ctx.createAnalyser();
-        newAnalyser.fftSize = 64;
+        newAnalyser.fftSize = 128;
 
         source.buffer = audioBuffer;
         source.connect(newAnalyser);
