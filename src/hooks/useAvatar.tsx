@@ -27,7 +27,7 @@ export const AVATARS: AvatarOption[] = [
   {
     id: "auntie-v1",
     label: "Auntie Mimi",
-    poster: "/models/AuntieM.glb",
+    poster: "/assets/avatars/mimipreview1.png",
     chromakey: "black",
     modelUrl: "/models/AuntieM.glb",
     videos: {
@@ -40,7 +40,7 @@ export const AVATARS: AvatarOption[] = [
   {
     id: "auntie-v2",
     label: "Auntie Mimi V2",
-    poster: "/models/AuntieM1.glb",
+    poster: "/assets/avatars/mimipreview2.png",
     chromakey: "black",
     modelUrl: "/models/AuntieM1.glb",
     videos: {
