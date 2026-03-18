@@ -3,10 +3,11 @@
 import { ReactNode, Suspense } from "react";
 import { AvatarState } from "@/types/avatar";
 import { useBackground } from "@/hooks/useBackground";
+import { useAvatar } from "@/hooks/useAvatar";
 import { Canvas } from "@react-three/fiber";
 import { Environment, OrbitControls } from "@react-three/drei";
-import Avatar from "@/components/Avatar"; 
-import { SELECTED_MODEL_URL } from "@/lib/constants";
+import Avatar from "@/components/Avatar";
+import { ACTIVE_MODELS } from "@/lib/constants";
 
 
 interface AvatarCompositeProps {
@@ -21,9 +22,10 @@ export default function AvatarComposite({
   currentViseme
 }: AvatarCompositeProps) {
   const { background } = useBackground();
-  
-  // Define this here so the Canvas 'key' and the Avatar 'modelUrl' stay in sync
-  const modelUrl = SELECTED_MODEL_URL;
+  const { avatar } = useAvatar();
+
+  // Use the selected avatar's model URL, fall back to default
+  const modelUrl = avatar.modelUrl || ACTIVE_MODELS.AUNTIE_V1;
 
   const isSpeaking = state === "speaking" || state === "greeting";
 

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useNotifications } from "@/hooks/useNotifications";
+import CaretakerTutorial, { useCaretakerTutorial } from "@/components/caretaker/CaretakerTutorial";
+import { getOrCreateSessionId } from "@/lib/client-session";
 
 // ── localStorage keys (shared with other pages) ──
 const MOOD_KEY = "memento-mood";
@@ -32,6 +34,13 @@ interface ScheduleEvent {
   time: string;
   type: string;
   date: string;
+}
+
+interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
 }
 
 // ── Helpers ──
@@ -65,11 +74,25 @@ function getMoodLabel(key: string): string {
 export default function DashboardPage() {
   const { t } = useLanguage();
   const { notifications, dismiss, dismissAll } = useNotifications();
+  const { showTutorial, dismissTutorial } = useCaretakerTutorial();
   const [mounted, setMounted] = useState(false);
   const [mood, setMood] = useState<MoodEntry | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([]);
   const [lastConversation, setLastConversation] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationMessage[]>([]);
+  const [convoExpanded, setConvoExpanded] = useState(false);
+
+  const fetchConversations = useCallback(async () => {
+    try {
+      const sessionId = getOrCreateSessionId();
+      const res = await fetch(`/api/conversation?sessionId=${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(data.messages ?? []);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     // Load mood
@@ -96,8 +119,9 @@ export default function DashboardPage() {
       if (raw) setLastConversation(raw);
     } catch { /* ignore */ }
 
+    fetchConversations();
     setMounted(true);
-  }, []);
+  }, [fetchConversations]);
 
   const today = getTodayKey();
   const isMoodToday = mood?.date === today;
@@ -117,6 +141,7 @@ export default function DashboardPage() {
 
   return (
     <div className="h-[100dvh] overflow-y-auto bg-cream-50 pt-24 px-5 pb-10">
+      {showTutorial && <CaretakerTutorial onDone={dismissTutorial} />}
       <div className="max-w-md mx-auto space-y-5">
         <h1 className="text-2xl font-bold text-navy">
           {t("dashboard.title") ?? "Dashboard"}
@@ -240,6 +265,57 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-navy truncate">{evt.title}</p>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Conversation Log ── */}
+        <div className="glass-heavy rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-navy/60">
+              Recent Conversations
+            </h2>
+            {conversations.length > 6 && (
+              <button
+                onClick={() => setConvoExpanded(!convoExpanded)}
+                className="text-xs font-bold text-teal active:scale-95 transition-transform"
+              >
+                {convoExpanded ? "Show Less" : "View All"}
+              </button>
+            )}
+          </div>
+          {conversations.length === 0 ? (
+            <p className="text-sm text-navy/40 font-semibold">
+              No conversations yet — your loved one hasn&apos;t chatted with Auntie Mimi yet.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {(convoExpanded ? conversations : conversations.slice(-6))
+                .map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`p-3 rounded-xl ${
+                      msg.role === "user"
+                        ? "bg-teal-50/50 ml-4"
+                        : "bg-white/40 mr-4"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-navy/40">
+                        {msg.role === "user" ? "Your loved one" : "Auntie Mimi"}
+                      </span>
+                      <span className="text-[10px] text-navy/25">
+                        {new Date(msg.createdAt).toLocaleString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-navy leading-relaxed">{msg.text}</p>
+                  </div>
+                ))}
             </div>
           )}
         </div>

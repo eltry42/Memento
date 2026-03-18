@@ -33,10 +33,11 @@ export const translations: Record<Language, Record<string, string>> = {
     // Home
     "home.chatLog": "Chat Log",
     "home.listening": "Listening...",
-    "mic.startTalking": "Start talking",
+    "mic.startTalking": "Tap to talk",
     "mic.connecting": "Connecting...",
-    "mic.unmute": "Unmute microphone",
+    "mic.unmute": "Tap to unmute",
     "mic.mute": "Mute microphone",
+    "mic.listening": "Listening...",
 
     // Onboarding
     "onboarding.slide1.title": "Tap to talk",
@@ -150,8 +151,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "home.listening": "聆听中...",
     "mic.startTalking": "点击说话",
     "mic.connecting": "连接中...",
-    "mic.unmute": "取消静音",
+    "mic.unmute": "点击取消静音",
     "mic.mute": "静音",
+    "mic.listening": "聆听中...",
 
     "onboarding.slide1.title": "点击说话",
     "onboarding.slide1.body": "按下麦克风按钮，自然地说话。我在这里陪你聊天，帮你记住事情，陪伴你。",
@@ -256,8 +258,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "home.listening": "கேட்கிறேன்...",
     "mic.startTalking": "பேச தட்டவும்",
     "mic.connecting": "இணைக்கிறது...",
-    "mic.unmute": "ஒலி திற",
+    "mic.unmute": "ஒலி திறக்க தட்டவும்",
     "mic.mute": "ஒலி நிறுத்து",
+    "mic.listening": "கேட்கிறேன்...",
 
     "onboarding.slide1.title": "பேச தட்டவும்",
     "onboarding.slide1.body": "மைக்ரோஃபோன் பொத்தானை அழுத்தி இயல்பாகப் பேசுங்கள். உங்களுடன் பேச, நினைவில் கொள்ள, உங்களுக்கு துணையாக இருக்க நான் இங்கே இருக்கிறேன்.",
@@ -360,10 +363,11 @@ export const translations: Record<Language, Record<string, string>> = {
 
     "home.chatLog": "Log Sembang",
     "home.listening": "Sedang mendengar...",
-    "mic.startTalking": "Mula bercakap",
+    "mic.startTalking": "Ketuk untuk bercakap",
     "mic.connecting": "Sedang menyambung...",
-    "mic.unmute": "Buka mikrofon",
+    "mic.unmute": "Ketuk untuk buka mikrofon",
     "mic.mute": "Bisukan mikrofon",
+    "mic.listening": "Sedang mendengar...",
 
     "onboarding.welcome.tagline": "Teman Mesra Anda",
     "onboarding.welcome.chooseLanguage": "Pilih bahasa",

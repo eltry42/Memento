@@ -11,10 +11,11 @@ interface MicButtonProps {
   disabled?: boolean;
 }
 
-function MicIcon() {
+function MicIcon({ size = 36 }: { size?: number }) {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -30,10 +31,11 @@ function MicIcon() {
   );
 }
 
-function MicOffIcon() {
+function MicOffIcon({ size = 36 }: { size?: number }) {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -53,8 +55,17 @@ function MicOffIcon() {
 function Spinner() {
   return (
     <div className="absolute inset-0 flex items-center justify-center">
-      <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+      <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
     </div>
+  );
+}
+
+function PulseRings() {
+  return (
+    <>
+      <span className="absolute inset-0 rounded-full bg-green-400/30 animate-[ping_2s_ease-out_infinite]" />
+      <span className="absolute -inset-3 rounded-full bg-green-400/15 animate-[ping_2s_ease-out_0.5s_infinite]" />
+    </>
   );
 }
 
@@ -69,18 +80,28 @@ export default function MicButton({
   const isConnecting = sessionPhase === "connecting";
   const isActive = sessionPhase === "active";
 
-  let bgClass = "glass-dark";
-  let extraClass = "";
+  // --- Determine visual state ---
+  let bgClass = "bg-gray-600/70";
+  let ringClass = "ring-2 ring-white/20";
+  let label = t("mic.startTalking");
+  let showPulse = false;
 
   if (isConnecting) {
-    bgClass = "glass-dark";
+    bgClass = "bg-gray-600/70";
+    label = t("mic.connecting");
   } else if (isActive && isMuted) {
-    bgClass = "bg-red-400/60";
+    bgClass = "bg-red-500/80";
+    ringClass = "ring-4 ring-red-300/50";
+    label = t("mic.unmute");
   } else if (isActive && isListening) {
-    bgClass = "bg-warm-pink";
-    extraClass = "animate-[mic-pulse_1.5s_ease-in-out_infinite]";
+    bgClass = "bg-green-500";
+    ringClass = "ring-4 ring-green-300/60";
+    showPulse = true;
+    label = t("mic.listening");
   } else if (isActive && !isMuted) {
-    bgClass = "bg-teal/60";
+    bgClass = "bg-teal-500/80";
+    ringClass = "ring-2 ring-teal-300/40";
+    label = t("mic.mute");
   }
 
   const isDisabled = disabled || isConnecting;
@@ -91,19 +112,41 @@ export default function MicButton({
   else if (isActive) ariaLabel = t("mic.mute");
 
   return (
-    <button
-      onClick={onPress}
-      disabled={isDisabled}
-      className={`relative flex items-center justify-center w-[72px] h-[72px] rounded-full transition-all active:scale-95 ${bgClass} ${extraClass} ${isDisabled ? "opacity-50" : ""}`}
-      aria-label={ariaLabel}
-    >
-      {isConnecting ? (
-        <Spinner />
-      ) : isActive && isMuted ? (
-        <MicOffIcon />
-      ) : (
-        <MicIcon />
-      )}
-    </button>
+    <div className="flex flex-col items-center gap-2">
+      <button
+        onClick={onPress}
+        disabled={isDisabled}
+        className={`
+          relative flex items-center justify-center
+          w-24 h-24 rounded-full
+          transition-all duration-300
+          active:scale-90
+          shadow-lg shadow-black/30
+          ${bgClass} ${ringClass}
+          ${isDisabled ? "opacity-50" : ""}
+        `}
+        aria-label={ariaLabel}
+      >
+        {showPulse && <PulseRings />}
+
+        <span className="relative z-10 text-white">
+          {isConnecting ? (
+            <Spinner />
+          ) : isActive && isMuted ? (
+            <MicOffIcon size={40} />
+          ) : (
+            <MicIcon size={40} />
+          )}
+        </span>
+      </button>
+
+      <span className={`
+        text-sm font-medium tracking-wide
+        transition-colors duration-300
+        ${isActive && isListening ? "text-green-300" : "text-white/70"}
+      `}>
+        {label}
+      </span>
+    </div>
   );
 }

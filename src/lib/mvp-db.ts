@@ -139,6 +139,8 @@ export function extractReminders(params: {
       recurringTime: null,
       recurringWeekday: null,
       status: "active",
+      notifiedOffsets: [],
+      lastNotifiedAt: null,
       createdAt: new Date().toISOString(),
     });
   }
@@ -156,6 +158,8 @@ export function extractReminders(params: {
       recurringTime: null,
       recurringWeekday: null,
       status: "active",
+      notifiedOffsets: [],
+      lastNotifiedAt: null,
       createdAt: new Date().toISOString(),
     });
   }
@@ -173,6 +177,8 @@ export function extractReminders(params: {
       recurringTime: null,
       recurringWeekday: null,
       status: "active",
+      notifiedOffsets: [],
+      lastNotifiedAt: null,
       createdAt: new Date().toISOString(),
     });
   }
@@ -236,7 +242,7 @@ export function listReminders(sessionId?: string): ReminderItem[] {
     .map((item) => ({
       ...item,
       kind: item.kind ?? "one-off",
-      status: item.status === "pending" ? "active" : item.status,
+      status: (item.status as string) === "pending" ? "active" as const : item.status,
       recurringPattern: item.recurringPattern ?? null,
       recurringTime: item.recurringTime ?? null,
       recurringWeekday: item.recurringWeekday ?? null,
@@ -374,8 +380,7 @@ export function getDueReminderNotifications(
 
     if (
       reminder.kind === "recurring" &&
-      reminder.recurringTime &&
-      reminder.status !== "done"
+      reminder.recurringTime
     ) {
       const [hours, minutes] = reminder.recurringTime.split(":").map(Number);
       if (Number.isNaN(hours) || Number.isNaN(minutes)) continue;

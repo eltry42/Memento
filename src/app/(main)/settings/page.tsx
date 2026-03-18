@@ -113,23 +113,19 @@ export default function SettingsPage() {
                 <button
                   key={av.id}
                   onClick={() => setAvatar(av.id)}
-                  className="relative rounded-xl overflow-hidden transition-transform active:scale-95"
-                  style={{
-                    outline: isActive ? "3px solid var(--color-teal)" : "3px solid transparent",
-                    outlineOffset: -1,
-                  }}
+                  className={`relative rounded-xl overflow-hidden transition-all active:scale-95 p-4 flex flex-col items-center gap-2 ${
+                    isActive
+                      ? "bg-teal/10 ring-3 ring-teal"
+                      : "bg-white/40 ring-1 ring-navy/10"
+                  }`}
                 >
-                  <img
-                    src={av.poster}
-                    alt={av.label}
-                    className="w-full aspect-square object-cover bg-black/80"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 px-2 py-2 bg-gradient-to-t from-black/50 to-transparent">
-                    <span className="text-white text-xs font-semibold">{av.label}</span>
-                  </div>
+                  <span className="text-4xl">👵</span>
+                  <span className={`text-sm font-bold ${isActive ? "text-teal" : "text-navy/60"}`}>
+                    {av.label}
+                  </span>
                   {isActive && (
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-teal flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-teal flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
@@ -138,6 +134,9 @@ export default function SettingsPage() {
               );
             })}
           </div>
+          <p className="text-xs text-navy/40 font-medium mt-3 text-center">
+            More avatars will be added soon!
+          </p>
         </div>
 
         {/* Other settings placeholder */}

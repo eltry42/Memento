@@ -15,6 +15,8 @@ export interface AvatarOption {
   label: string;
   poster: string;
   chromakey: ChromakeyMode;
+  /** URL to 3D model (.glb) if using 3D avatar */
+  modelUrl?: string;
   /** Maps each avatar state to a video. If a state is missing, falls back to "idle". */
   videos: Partial<Record<AvatarState, AvatarVideoSources>> & {
     idle: AvatarVideoSources;
@@ -23,42 +25,28 @@ export interface AvatarOption {
 
 export const AVATARS: AvatarOption[] = [
   {
-    id: "default",
-    label: "Memento",
-    poster: "/assets/videos/avatar-idle-poster.webp",
+    id: "auntie-v1",
+    label: "Auntie Mimi",
+    poster: "/models/AuntieM.glb",
     chromakey: "black",
+    modelUrl: "/models/AuntieM.glb",
     videos: {
       idle: {
-        webm: "/assets/videos/avatar-idle.webm",
-        mp4: "/assets/videos/avatar-idle.mp4",
+        webm: "",
+        mp4: "",
       },
     },
   },
   {
-    id: "dog",
-    label: "Buddy",
-    poster: "/assets/videos/dog-idle-poster.webp",
-    chromakey: "green",
+    id: "auntie-v2",
+    label: "Auntie Mimi V2",
+    poster: "/models/AuntieM1.glb",
+    chromakey: "black",
+    modelUrl: "/models/AuntieM1.glb",
     videos: {
       idle: {
-        webm: "/assets/videos/dog-idle.webm",
-        mp4: "/assets/videos/dog-idle.mp4",
-      },
-      listening: {
-        webm: "/assets/videos/dog-attentive.webm",
-        mp4: "/assets/videos/dog-attentive.mp4",
-      },
-      thinking: {
-        webm: "/assets/videos/dog-attentive.webm",
-        mp4: "/assets/videos/dog-attentive.mp4",
-      },
-      greeting: {
-        webm: "/assets/videos/dog-happy.webm",
-        mp4: "/assets/videos/dog-happy.mp4",
-      },
-      speaking: {
-        webm: "/assets/videos/dog-happy.webm",
-        mp4: "/assets/videos/dog-happy.mp4",
+        webm: "",
+        mp4: "",
       },
     },
   },

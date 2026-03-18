@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MOCK_WELLNESS_ACTIVITIES, MOCK_WELLNESS_STREAK } from "@/lib/mock-data";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useMode } from "@/hooks/useMode";
 
 const MOOD_KEYS = [
   { emoji: "😊", key: "wellness.mood.great" },
@@ -66,13 +68,19 @@ function ActivityIcon({ icon }: { icon: string }) {
 
 export default function WellnessPage() {
   const { t } = useLanguage();
+  const { mode } = useMode();
+  const router = useRouter();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    if (mode === "caretaker") {
+      router.replace("/dashboard");
+      return;
+    }
     setMounted(true);
     setSelectedMood(getSavedMood());
-  }, []);
+  }, [mode, router]);
 
   function handleMoodSelect(key: string) {
     setSelectedMood(key);
@@ -139,6 +147,14 @@ export default function WellnessPage() {
               if (activity.id === "1") {
                 return (
                   <Link key={activity.id} href="/wellness/memory-game">
+                    {cardContent}
+                  </Link>
+                );
+              }
+
+              if (activity.id === "2") {
+                return (
+                  <Link key={activity.id} href="/wellness/story-time">
                     {cardContent}
                   </Link>
                 );

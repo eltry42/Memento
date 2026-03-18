@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import OpenAI from "openai";
 import {
-  getConversationInstruction,
+  getOpenAIConversationMessages,
+  getMeralionRewriteInstruction,
   getSummarizationInstruction,
 } from "@/lib/prompts";
 import { getGuardrailResponse } from "@/lib/conversation-guardrails";
@@ -9,6 +11,10 @@ const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_PROCESS_RETRIES = 10;
 
 type ConversationMessage = { role: "user" | "assistant"; text: string };
+
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 function createSilentWavBuffer(durationMs = 250, sampleRate = 16000) {
   const numChannels = 1;
@@ -95,7 +101,44 @@ function buildSummaryUpdateLog(userText: string, aiText: string) {
   return `user: ${userText}\nassistant: ${aiText}`;
 }
 
-async function processWithRetry({
+async function ensureMeralionS3Key(apiKey: string): Promise<string> {
+  const uploadUrlResponse = await fetch("https://api.cr8lab.com/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+    body: JSON.stringify({
+      filename: "prompt-lab-silence.wav",
+      contentType: "audio/wav",
+    }),
+  });
+
+  if (!uploadUrlResponse.ok) {
+    throw new Error(`MERaLiON upload-url failed: ${uploadUrlResponse.status}`);
+  }
+
+  const uploadUrlData = (await uploadUrlResponse.json()) as {
+    response?: { url?: string; key?: string };
+  };
+  const s3Url = uploadUrlData.response?.url;
+  const s3Key = uploadUrlData.response?.key;
+
+  if (!s3Url || !s3Key) {
+    throw new Error("MERaLiON upload-url response was missing url or key");
+  }
+
+  const uploadResponse = await fetch(s3Url, {
+    method: "PUT",
+    headers: { "Content-Type": "audio/wav" },
+    body: createSilentWavBuffer(),
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`MERaLiON S3 upload failed: ${uploadResponse.status}`);
+  }
+
+  return s3Key;
+}
+
+async function meralionProcessWithRetry({
   apiKey,
   key,
   instruction,
@@ -125,9 +168,7 @@ async function processWithRetry({
       );
     }
 
-    console.log(
-      `Prompt lab process attempt ${attempt + 1} could not find file yet, retrying...`,
-    );
+    console.log(`MERaLiON process attempt ${attempt + 1} file not found, retrying...`);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
@@ -136,10 +177,17 @@ async function processWithRetry({
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.MERALION_API_KEY;
-    if (!apiKey) {
+    const meralionKey = process.env.MERALION_API_KEY;
+    if (!meralionKey) {
       return NextResponse.json(
         { error: "Missing MERaLiON API key" },
+        { status: 500 },
+      );
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: "Missing OpenAI API key" },
         { status: 500 },
       );
     }
@@ -173,77 +221,53 @@ export async function POST(request: Request) {
 
     const convoHistory = compileConvoHistory(history);
 
-    console.log("Prompt lab summary sent to MERaLiON:\n", currentSummary, "\n-------------------");
-    console.log("Prompt lab history sent to MERaLiON:\n", convoHistory, "\n-------------------");
-    console.log("Prompt lab latest input sent to MERaLiON:\n", userText, "\n-------------------");
-
-    const uploadUrlResponse = await fetch("https://api.cr8lab.com/upload-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({
-        filename: "prompt-lab-silence.wav",
-        contentType: "audio/wav",
+    // STEP 1: OpenAI reasoning + S3 key setup in parallel
+    const [openaiResponse, s3Key] = await Promise.all([
+      getOpenAI().chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: getOpenAIConversationMessages(currentSummary, convoHistory, userText),
+        max_tokens: 256,
+        temperature: 0.7,
       }),
-    });
+      ensureMeralionS3Key(meralionKey),
+    ]);
 
-    if (!uploadUrlResponse.ok) {
-      const errorText = await uploadUrlResponse.text();
-      throw new Error(
-        `MERaLiON upload-url failed: ${uploadUrlResponse.status} ${errorText}`,
-      );
-    }
+    const openaiText = openaiResponse.choices[0]?.message?.content?.trim() || "";
+    console.log("🤖 OpenAI response:", openaiText);
 
-    const uploadUrlData = (await uploadUrlResponse.json()) as {
-      response?: { url?: string; key?: string };
-    };
-    const s3Url = uploadUrlData.response?.url;
-    const s3Key = uploadUrlData.response?.key;
+    // STEP 2: MERaLiON rewrite + summarization in parallel
+    const [rewriteResult, summaryResult] = await Promise.allSettled([
+      meralionProcessWithRetry({
+        apiKey: meralionKey,
+        key: s3Key,
+        instruction: getMeralionRewriteInstruction(openaiText),
+      }).then((res) => res.json()),
 
-    if (!s3Url || !s3Key) {
-      throw new Error("MERaLiON upload-url response was missing url or key");
-    }
-
-    const uploadResponse = await fetch(s3Url, {
-      method: "PUT",
-      headers: { "Content-Type": "audio/wav" },
-      body: createSilentWavBuffer(),
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      throw new Error(
-        `MERaLiON S3 upload failed: ${uploadResponse.status} ${errorText}`,
-      );
-    }
-
-    const processResponse = await processWithRetry({
-      apiKey,
-      key: s3Key,
-      instruction: getConversationInstruction(
-        currentSummary,
-        convoHistory,
-        userText,
-      ),
-    });
-
-    const processData = await processResponse.json();
-    const aiText = processData.response.text as string;
-    let updatedSummary = currentSummary;
-
-    try {
-      const summaryResponse = await processWithRetry({
-        apiKey,
+      meralionProcessWithRetry({
+        apiKey: meralionKey,
         key: s3Key,
         instruction: getSummarizationInstruction(
           currentSummary,
-          buildSummaryUpdateLog(userText, aiText),
+          buildSummaryUpdateLog(userText, openaiText),
         ),
-      });
+      }).then((res) => res.json()),
+    ]);
 
-      const summaryData = await summaryResponse.json();
-      updatedSummary = summaryData.response.text as string;
-    } catch {
-      console.error("Prompt lab summarization failed, keeping old summary.");
+    // Use rewritten text, fall back to OpenAI's plain text
+    let aiText = openaiText;
+    if (rewriteResult.status === "fulfilled") {
+      aiText = rewriteResult.value.response.text;
+      console.log("🗣️ MERaLiON rewrite:", aiText);
+    } else {
+      console.error("MERaLiON rewrite failed, using OpenAI response:", rewriteResult.reason);
+    }
+
+    let updatedSummary = currentSummary;
+    if (summaryResult.status === "fulfilled") {
+      updatedSummary = summaryResult.value.response.text;
+      console.log("📝 Updated Summary:", updatedSummary);
+    } else {
+      console.error("Summarization failed, keeping old summary:", summaryResult.reason);
     }
 
     return NextResponse.json({

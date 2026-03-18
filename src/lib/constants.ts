@@ -11,7 +11,7 @@ const ALL_NAV_TABS: NavTab[] = [
 ];
 
 const ELDERLY_TAB_IDS = new Set(["home", "wellness", "settings"]);
-const CARETAKER_TAB_IDS = new Set(["home", "dashboard", "wellness", "reminders", "schedule", "settings"]);
+const CARETAKER_TAB_IDS = new Set(["dashboard", "reminders", "schedule", "settings"]);
 
 export function getNavTabs(mode: Mode): NavTab[] {
   const allowed = mode === "elderly" ? ELDERLY_TAB_IDS : CARETAKER_TAB_IDS;

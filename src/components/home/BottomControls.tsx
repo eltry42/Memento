@@ -69,7 +69,8 @@ export default function BottomControls({
 
   return (
     <div className="absolute bottom-0 left-0 right-0 safe-bottom">
-      <div className="flex items-end justify-between px-5 pb-6">
+      <div className="flex items-end justify-center px-5 pb-6 relative">
+        {/* Mic button centered */}
         <MicButton
           sessionPhase={sessionPhase}
           isMuted={isMuted}
@@ -77,7 +78,9 @@ export default function BottomControls({
           onPress={onMicPress}
           disabled={micDisabled}
         />
-        <div className="flex flex-col gap-2.5">
+
+        {/* Side buttons on the right */}
+        <div className="absolute right-5 bottom-6 flex flex-col gap-2.5">
           <PillButton icon={<LanguageIcon />} label={currentLang.shortLabel} onClick={cycleLanguage} />
           <PillButton icon={<ChatIcon />} label={t("home.chatLog")} onClick={onChatLogPress} />
         </div>

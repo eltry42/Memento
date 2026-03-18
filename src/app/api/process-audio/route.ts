@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
-import { getConversationInstruction, getSummarizationInstruction } from "@/lib/prompts";
+import OpenAI from "openai";
+import {
+  getOpenAIConversationMessages,
+  getMeralionRewriteInstruction,
+  getSummarizationInstruction,
+} from "@/lib/prompts";
 import { getGuardrailResponse } from "@/lib/conversation-guardrails";
+
 const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_TRANSCRIPT_RETRIES = 10;
 
-// Helper to format history for the AI's instruction
 type ConversationMessage = { role: "user" | "assistant"; text: string };
 
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 function parseHistory(raw: string | null): ConversationMessage[] {
   if (!raw) return [];
@@ -35,7 +43,6 @@ function parseHistory(raw: string | null): ConversationMessage[] {
 
 function compileConvoHistory(history: ConversationMessage[]) {
   if (!history || history.length === 0) return "No previous context.";
-  // Slice to keep only the last 6 messages to stay within token limits
   return history
     .slice(-NUMBER_OF_MESSAGES_TO_KEEP)
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
@@ -50,23 +57,28 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
-    const apiKey = process.env.MERALION_API_KEY;
+    const meralionKey = process.env.MERALION_API_KEY;
     const currentSummary = (formData.get("summary") as string) || "";
-
-    // Extract conversation history if sent
     const history = parseHistory(formData.get("history") as string | null);
 
-    if (!audioFile || !apiKey) {
+    if (!audioFile || !meralionKey) {
       return NextResponse.json(
-        { error: "Missing file or API key" },
+        { error: "Missing file or MERaLiON API key" },
         { status: 400 },
       );
     }
 
-    // STEP 1: Get the Presigned S3 URL, creates custom for us
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: "Missing OpenAI API key" },
+        { status: 500 },
+      );
+    }
+
+    // STEP 1: Get presigned S3 URL
     const urlResponse = await fetch("https://api.cr8lab.com/upload-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+      headers: { "Content-Type": "application/json", "x-api-key": meralionKey },
       body: JSON.stringify({
         filename: "recording.wav",
         contentType: "audio/wav",
@@ -75,7 +87,7 @@ export async function POST(request: Request) {
     const urlData = await urlResponse.json();
     const { url: s3Url, key: s3Key } = urlData.response;
 
-    // STEP 2: Upload to S3 using PUT
+    // STEP 2: Upload audio to S3
     const arrayBuffer = await audioFile.arrayBuffer();
     const uploadResponse = await fetch(s3Url, {
       method: "PUT",
@@ -85,89 +97,110 @@ export async function POST(request: Request) {
 
     if (!uploadResponse.ok) throw new Error("S3 Upload Failed");
 
-    // --- HELPER: Retry Transcription (Wait for S3 to see the file) ---
-    // IMPROVEMENT TODO: can use exponential backoff -> increasing time delay between each iteration
+    // STEP 3: Transcribe with MERaLiON
     let userText = "";
     for (let i = 0; i < NUMBER_OF_TRANSCRIPT_RETRIES; i++) {
-      console.log(
-        `Attempt ${i + 1}: Checking if file is ready for transcription...`,
-      );
+      console.log(`Attempt ${i + 1}: Checking if file is ready for transcription...`);
 
       const transcribeRes = await fetch("https://api.cr8lab.com/transcribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-api-key": meralionKey },
         body: JSON.stringify({ key: s3Key }),
       });
 
       if (transcribeRes.ok) {
         const transcribeData = await transcribeRes.json();
         const rawText = transcribeData.response.text;
-        userText = rawText.replace(/<Speaker\s?\d+>:\s?/gi, "").trim(); // remove speaker tags if any
+        userText = rawText.replace(/<Speaker\s?\d+>:\s?/gi, "").trim();
         console.log("✅ Transcription successful:", userText);
         break;
       }
-      // Wait 1 second before retrying if file not found
-      if (i === 9) {
+
+      if (i === NUMBER_OF_TRANSCRIPT_RETRIES - 1) {
         throw new Error("Transcribing data failed");
       }
       console.log("File not found yet, waiting 1s...");
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
+    // Guardrail check
     const convoHistory = compileConvoHistory(history);
     const guardrailResponse = getGuardrailResponse(userText);
     if (guardrailResponse) {
       console.log("Guardrail triggered for input:", userText);
       return NextResponse.json({
-        userText: userText,
+        userText,
         aiText: guardrailResponse,
         summary: currentSummary,
       });
     }
-    // --- STEP 3: Process the AI Response ---
-    const processResponse = await fetch("https://api.cr8lab.com/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify({
-        key: s3Key,
-        instruction: getConversationInstruction(currentSummary, convoHistory, userText),
-      }),
+
+    // STEP 4: OpenAI generates the reasoning response
+    console.log("📤 Sending to OpenAI for reasoning...");
+    const openaiMessages = getOpenAIConversationMessages(currentSummary, convoHistory, userText);
+    const openaiResponse = await getOpenAI().chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: openaiMessages,
+      max_tokens: 256,
+      temperature: 0.7,
     });
-    console.log("Long-term summary sent to MERaLiON:\n", currentSummary, "\n-------------------");
-    console.log("Conversation history sent to MERaLiON:\n", convoHistory, "\n-------------------");
-    console.log("Latest user input sent to MERaLiON:\n", userText, "\n-------------------");
+    const openaiText = openaiResponse.choices[0]?.message?.content?.trim() || "";
+    console.log("🤖 OpenAI response:", openaiText);
 
-    if (!processResponse.ok) throw new Error("MERaLiON processing failed");
-    const processData = await processResponse.json();
-    const aiText = processData.response.text;
-    let updatedSummary = currentSummary;
-    console.log("ASSISTANT REPLIED:", aiText);
-
-    console.log("Number of messages in history:", history.length);
-
-    try {
-      const summaryResponse = await fetch("https://api.cr8lab.com/process", {
+    // STEP 5: MERaLiON rewrite + summarization in parallel
+    const [rewriteResult, summaryResult] = await Promise.allSettled([
+      // MERaLiON rewrites OpenAI's response into Singlish
+      fetch("https://api.cr8lab.com/process", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-api-key": meralionKey },
+        body: JSON.stringify({
+          key: s3Key,
+          instruction: getMeralionRewriteInstruction(openaiText),
+        }),
+      }).then((res) => {
+        if (!res.ok) throw new Error("MERaLiON rewrite failed");
+        return res.json();
+      }),
+
+      // MERaLiON summarizes the conversation for long-term memory
+      fetch("https://api.cr8lab.com/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": meralionKey },
         body: JSON.stringify({
           key: s3Key,
           instruction: getSummarizationInstruction(
             currentSummary,
-            buildSummaryUpdateLog(userText, aiText),
+            buildSummaryUpdateLog(userText, openaiText),
           ),
         }),
-      });
-      const summaryData = await summaryResponse.json();
-      updatedSummary = summaryData.response.text;
-      console.log("Updated Summary:\n", updatedSummary, "\n-------------------");
-    } catch {
-      console.error("Summarization failed, keeping old summary.");
+      }).then((res) => {
+        if (!res.ok) throw new Error("MERaLiON summarization failed");
+        return res.json();
+      }),
+    ]);
+
+    // Use MERaLiON's rewritten text, fall back to OpenAI's plain text if rewrite fails
+    let aiText = openaiText;
+    if (rewriteResult.status === "fulfilled") {
+      aiText = rewriteResult.value.response.text;
+      console.log("🗣️ MERaLiON rewrite:", aiText);
+    } else {
+      console.error("MERaLiON rewrite failed, using OpenAI response directly:", rewriteResult.reason);
     }
- 
+
+    // Use updated summary, fall back to current if summarization fails
+    let updatedSummary = currentSummary;
+    if (summaryResult.status === "fulfilled") {
+      updatedSummary = summaryResult.value.response.text;
+      console.log("📝 Updated Summary:", updatedSummary);
+    } else {
+      console.error("Summarization failed, keeping old summary:", summaryResult.reason);
+    }
+
     return NextResponse.json({
-      userText: userText,
-      aiText: aiText,
-      summary: updatedSummary, // send back the potentially updated summary
+      userText,
+      aiText,
+      summary: updatedSummary,
     });
   } catch (error) {
     console.error("Audio Processing Error:", error);
