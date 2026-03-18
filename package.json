@@ -2,6 +2,11 @@
   "name": "memento",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.8.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=11.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -22,7 +27,7 @@
     "livekit-client": "^2.17.2",
     "livekit-server-sdk": "^2.15.0",
     "next": "16.1.6",
-    "openai": "^6.31.0",
+    "openai": "^6.32.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "three": "^0.183.2"

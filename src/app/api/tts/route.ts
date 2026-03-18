@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeLanguage } from "@/lib/language";
 
 export async function GET() {
   return NextResponse.json({ message: "Backend is ALIVE" });
@@ -8,9 +9,7 @@ export async function POST(request: Request) {
   try {
     const { text, language } = await request.json();
 
-    const requestedLanguage =
-      typeof language === "string" ? language.toLowerCase() : "en";
-    const normalizedLanguage = requestedLanguage.split("-")[0];
+    const normalizedLanguage = normalizeLanguage(language);
 
     // 1. Get IDs from env
     const voiceIdByLanguage: Record<string, string | undefined> = {
@@ -38,7 +37,7 @@ export async function POST(request: Request) {
 
     // --- LOOK AT YOUR TERMINAL FOR THESE LOGS ---
     console.log("--- ElevenLabs Request Start ---");
-    console.log("Language:", requestedLanguage);
+    console.log("Language:", language);
     console.log("Normalized Language:", normalizedLanguage);
     console.log("Voice ID being used:", voiceId);
     console.log("Model ID being used:", modelId);

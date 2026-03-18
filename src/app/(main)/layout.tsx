@@ -5,6 +5,7 @@ import { AvatarProvider } from "@/hooks/useAvatar";
 import { LanguageProvider } from "@/hooks/useLanguage";
 import ReminderPopup from "@/components/reminder/ReminderPopup";
 import { ModeProvider } from "@/hooks/useMode";
+import AppTutorial from "@/components/tutorial/AppTutorial";
 
 export default function MainLayout({
   children,
@@ -19,6 +20,7 @@ export default function MainLayout({
             <AvatarStateMachineProvider>
               <TopNavBar />
               <ReminderPopup />
+              <AppTutorial />
               {children}
             </AvatarStateMachineProvider>
           </AvatarProvider>

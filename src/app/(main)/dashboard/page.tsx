@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useNotifications } from "@/hooks/useNotifications";
-import CaretakerTutorial, { useCaretakerTutorial } from "@/components/caretaker/CaretakerTutorial";
 import { getOrCreateSessionId } from "@/lib/client-session";
 
 // ── localStorage keys (shared with other pages) ──
@@ -74,7 +73,6 @@ function getMoodLabel(key: string): string {
 export default function DashboardPage() {
   const { t } = useLanguage();
   const { notifications, dismiss, dismissAll } = useNotifications();
-  const { showTutorial, dismissTutorial } = useCaretakerTutorial();
   const [mounted, setMounted] = useState(false);
   const [mood, setMood] = useState<MoodEntry | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -141,7 +139,6 @@ export default function DashboardPage() {
 
   return (
     <div className="h-[100dvh] overflow-y-auto bg-cream-50 pt-24 px-5 pb-10">
-      {showTutorial && <CaretakerTutorial onDone={dismissTutorial} />}
       <div className="max-w-md mx-auto space-y-5">
         <h1 className="text-2xl font-bold text-navy">
           {t("dashboard.title") ?? "Dashboard"}

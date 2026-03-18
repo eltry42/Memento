@@ -6,6 +6,7 @@ import {
   getSummarizationInstruction,
 } from "@/lib/prompts";
 import { getGuardrailResponse } from "@/lib/conversation-guardrails";
+import { detectLanguageFromText, normalizeLanguage } from "@/lib/language";
 
 const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_TRANSCRIPT_RETRIES = 10;
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
     const meralionKey = process.env.MERALION_API_KEY;
     const currentSummary = (formData.get("summary") as string) || "";
     const history = parseHistory(formData.get("history") as string | null);
+    const preferredLanguage = normalizeLanguage(formData.get("preferredLanguage"));
 
     if (!audioFile || !meralionKey) {
       return NextResponse.json(
@@ -125,6 +127,7 @@ export async function POST(request: Request) {
 
     // Guardrail check
     const convoHistory = compileConvoHistory(history);
+    const detectedLanguage = detectLanguageFromText(userText, preferredLanguage);
     const guardrailResponse = getGuardrailResponse(userText);
     if (guardrailResponse) {
       console.log("Guardrail triggered for input:", userText);
@@ -132,12 +135,18 @@ export async function POST(request: Request) {
         userText,
         aiText: guardrailResponse,
         summary: currentSummary,
+        language: detectedLanguage,
       });
     }
 
     // STEP 4: OpenAI generates the reasoning response
     console.log("📤 Sending to OpenAI for reasoning...");
-    const openaiMessages = getOpenAIConversationMessages(currentSummary, convoHistory, userText);
+    const openaiMessages = getOpenAIConversationMessages(
+      currentSummary,
+      convoHistory,
+      userText,
+      detectedLanguage,
+    );
     const openaiResponse = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: openaiMessages,
@@ -155,7 +164,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json", "x-api-key": meralionKey },
         body: JSON.stringify({
           key: s3Key,
-          instruction: getMeralionRewriteInstruction(openaiText),
+          instruction: getMeralionRewriteInstruction(openaiText, detectedLanguage),
         }),
       }).then((res) => {
         if (!res.ok) throw new Error("MERaLiON rewrite failed");
@@ -201,6 +210,7 @@ export async function POST(request: Request) {
       userText,
       aiText,
       summary: updatedSummary,
+      language: detectedLanguage,
     });
   } catch (error) {
     console.error("Audio Processing Error:", error);

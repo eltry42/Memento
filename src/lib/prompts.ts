@@ -1,3 +1,5 @@
+import { SupportedLanguage, getLanguageInstruction } from "@/lib/language";
+
 /**
  * Prompts for Memento AI
  * This file centralizes the AI's personality and logic instructions.
@@ -96,6 +98,7 @@ export const getOpenAIConversationMessages = (
   summary: string,
   history: string,
   input: string,
+  language: SupportedLanguage,
 ): { role: "system" | "user"; content: string }[] => [
   {
     role: "system",
@@ -118,7 +121,9 @@ INSTRUCTIONS:
 - Do not stack multiple questions.
 - When appropriate, learn one small durable fact about the user naturally.
 - Never provide instructions for violence, weapons, scams, or illegal activities.
-- Do NOT use Singlish or local slang — write in plain, clear English. Another model will handle the tone.`,
+- ${getLanguageInstruction(language)}
+- Match the user's language from their latest message. Do not normalize to English just because earlier context was in English.
+- Use plain, clear wording. Another model may adjust the tone afterward.`,
   },
   {
     role: "user",
@@ -130,7 +135,10 @@ INSTRUCTIONS:
  * MERaLiON rewrite prompt — takes OpenAI's plain English response
  * and rewrites it in Auntie Mimi's Singlish voice.
  */
-export const getMeralionRewriteInstruction = (openAiResponse: string) => `
+export const getMeralionRewriteInstruction = (
+  openAiResponse: string,
+  language: SupportedLanguage,
+) => `
 TASK: Rewrite the following reply as Auntie Mimi, a warm Singaporean AI companion.
 
 ORIGINAL REPLY:
@@ -138,7 +146,17 @@ ORIGINAL REPLY:
 
 RULES:
 - Keep the exact same meaning and information. Do not add or remove content.
-- Use warm, natural Singlish (e.g., "lah", "hor", "Uncle", "Auntie") but don't overdo it.
+- Output in ${
+    language === "zh"
+      ? "Simplified Chinese"
+      : language === "ta"
+        ? "Tamil"
+        : language === "ms"
+          ? "Bahasa Melayu"
+          : "English"
+  }.
+- If the language is English, use warm, natural Singlish lightly (e.g., "lah", "hor", "Uncle", "Auntie"), but don't overdo it.
+- If the language is not English, keep the response warm, natural, and locally appropriate without forcing English Singlish particles.
 - Sound calm, kind, and conversational — like a real person talking.
 - Keep the same length (1-4 sentences).
 - Output ONLY the rewritten reply, nothing else.

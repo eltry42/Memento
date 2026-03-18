@@ -6,6 +6,7 @@ import {
   getSummarizationInstruction,
 } from "@/lib/prompts";
 import { getGuardrailResponse } from "@/lib/conversation-guardrails";
+import { detectLanguageFromText, normalizeLanguage } from "@/lib/language";
 
 const NUMBER_OF_MESSAGES_TO_KEEP = 10;
 const NUMBER_OF_PROCESS_RETRIES = 10;
@@ -196,11 +197,13 @@ export async function POST(request: Request) {
       input?: string;
       history?: string;
       summary?: string;
+      preferredLanguage?: string;
     };
 
     const userText = body.input?.trim() ?? "";
     const currentSummary = body.summary?.trim() || "";
     const history = parseHistory(body.history);
+    const preferredLanguage = normalizeLanguage(body.preferredLanguage);
 
     if (!userText) {
       return NextResponse.json(
@@ -210,12 +213,14 @@ export async function POST(request: Request) {
     }
 
     const guardrailResponse = getGuardrailResponse(userText);
+    const detectedLanguage = detectLanguageFromText(userText, preferredLanguage);
     if (guardrailResponse) {
       console.log("Prompt lab guardrail triggered for input:", userText);
       return NextResponse.json({
         userText,
         aiText: guardrailResponse,
         summary: currentSummary,
+        language: detectedLanguage,
       });
     }
 
@@ -225,7 +230,12 @@ export async function POST(request: Request) {
     const [openaiResponse, s3Key] = await Promise.all([
       getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
-        messages: getOpenAIConversationMessages(currentSummary, convoHistory, userText),
+        messages: getOpenAIConversationMessages(
+          currentSummary,
+          convoHistory,
+          userText,
+          detectedLanguage,
+        ),
         max_tokens: 256,
         temperature: 0.7,
       }),
@@ -240,7 +250,7 @@ export async function POST(request: Request) {
       meralionProcessWithRetry({
         apiKey: meralionKey,
         key: s3Key,
-        instruction: getMeralionRewriteInstruction(openaiText),
+        instruction: getMeralionRewriteInstruction(openaiText, detectedLanguage),
       }).then((res) => res.json()),
 
       meralionProcessWithRetry({
@@ -274,6 +284,7 @@ export async function POST(request: Request) {
       userText,
       aiText,
       summary: updatedSummary,
+      language: detectedLanguage,
     });
   } catch (error) {
     console.error("Text Prompt Processing Error:", error);

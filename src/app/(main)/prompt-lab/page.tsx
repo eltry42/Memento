@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { useLanguage } from "@/hooks/useLanguage";
 import { ConversationMessage } from "@/types/conversation";
 
 let messageIdCounter = 0;
@@ -42,6 +43,7 @@ function MessageCard({ message }: { message: ConversationMessage }) {
 }
 
 export default function PromptLabPage() {
+  const { language } = useLanguage();
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [summary, setSummary] = useState("No summary yet.");
   const [input, setInput] = useState("");
@@ -78,6 +80,7 @@ export default function PromptLabPage() {
           input: trimmedInput,
           history: historyJson,
           summary,
+          preferredLanguage: language,
         }),
       });
 

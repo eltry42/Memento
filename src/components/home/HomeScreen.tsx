@@ -60,7 +60,11 @@ export default function HomeScreen() {
     handleMicPress();
   }, [activeSuggestion, handleDismissSuggestion, resetTimer, handleMicPress]);
 
-  const micDisabled = (state !== "idle" && state !== "greeting") && !activeSuggestion;
+  const micDisabled =
+    state !== "idle" &&
+    state !== "greeting" &&
+    state !== "listening" &&
+    !activeSuggestion;
 
   const onSpeakingComplete = () => {
     // If this was a suggestion, don't auto-dismiss — wait for button press

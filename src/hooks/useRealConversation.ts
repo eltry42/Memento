@@ -14,11 +14,13 @@ interface UseRealConversationOptions {
 }
 
 export function useRealConversation({ dispatch }: UseRealConversationOptions) {
+  const { language } = useLanguage();
   const [bubbleText, setBubbleText] = useState("");
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [summary, setSummary] = useState<string>("No summary yet.");
   const [vadListening, setVadListening] = useState(false);
   const [currentViseme, setCurrentViseme] = useState<string | null>(null);
+  const [conversationLanguage, setConversationLanguage] = useState(language);
   const visemeTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
   const bubbleWordTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
@@ -33,7 +35,6 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const { language } = useLanguage();
   const vadRef = useRef<MicVAD | null>(null);
   const vadInitializingRef = useRef(false);
 
@@ -117,7 +118,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
   );
 
   const playAssistantAudio = useCallback(
-    async (text: string, kind: "greeting" | "speaking") => {
+    async (text: string, kind: "greeting" | "speaking", speechLanguage?: string) => {
       activeSpeechKindRef.current = kind;
       const token = ++playbackTokenRef.current;
 
@@ -127,7 +128,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language }),
+          body: JSON.stringify({ text, language: speechLanguage ?? conversationLanguage }),
         });
 
         if (!response.ok) {
@@ -176,7 +177,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
         finishAssistantSpeech(kind);
       }
     },
-    [cleanupAudio, finishAssistantSpeech, language, scheduleSyncedBubbleWords],
+    [cleanupAudio, conversationLanguage, finishAssistantSpeech, scheduleSyncedBubbleWords],
   );
 
   // Single Effect for Initialization: Load Summary and Trigger Greeting
@@ -237,6 +238,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
             formData.append("sessionId", sessionIdRef.current);
             formData.append("history", JSON.stringify(messagesRef.current));
             formData.append("summary", summaryRef.current);
+            formData.append("preferredLanguage", language);
 
             const response = await fetch("/api/process-audio", {
               method: "POST",
@@ -247,6 +249,9 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
             if (data.summary) {
               setSummary(data.summary);
               localStorage.setItem("memento_summary", data.summary);
+            }
+            if (typeof data.language === "string") {
+              setConversationLanguage(data.language);
             }
 
             setMessages((prev) => [
@@ -266,7 +271,7 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
             ]);
 
             dispatchRef.current({ type: "START_SPEAKING", text: data.aiText });
-            playAssistantAudio(data.aiText, "speaking");
+            playAssistantAudio(data.aiText, "speaking", data.language);
           } catch (error) {
             console.error("Process failed", error);
             setBubbleText("Aiyoh, something went wrong. Try again?");
@@ -281,7 +286,11 @@ export function useRealConversation({ dispatch }: UseRealConversationOptions) {
       vadInitializingRef.current = false;
       throw e;
     }
-  }, [cleanupAudio, playAssistantAudio]);
+  }, [cleanupAudio, language, playAssistantAudio]);
+
+  useEffect(() => {
+    setConversationLanguage(language);
+  }, [language]);
 
   const handleMicPress = useCallback(async () => {
     if (audioCtxRef.current?.state === "suspended") {
