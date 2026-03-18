@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -69,6 +69,27 @@ function getMoodLabel(key: string): string {
   return map[key] ?? "Unknown";
 }
 
+function getMoodScore(key?: string | null): number | null {
+  if (!key) return null;
+
+  const map: Record<string, number> = {
+    "wellness.mood.great": 100,
+    "wellness.mood.good": 82,
+    "wellness.mood.okay": 62,
+    "wellness.mood.low": 35,
+    "wellness.mood.sad": 18,
+  };
+
+  return map[key] ?? null;
+}
+
+function getProgressTone(value: number | null) {
+  if (value == null) return "bg-gray-300";
+  if (value >= 80) return "bg-teal";
+  if (value >= 50) return "bg-amber-400";
+  return "bg-warm-pink";
+}
+
 // ── Component ──
 export default function DashboardPage() {
   const { t } = useLanguage();
@@ -129,11 +150,15 @@ export default function DashboardPage() {
   const takenCount = medicationReminders.filter((r) => r.taken).length;
   const totalMeds = medicationReminders.length;
   const adherencePercent = totalMeds > 0 ? Math.round((takenCount / totalMeds) * 100) : null;
+  const activeReminders = reminders.filter((r) => !r.taken).length;
+  const moodScore = isMoodToday ? getMoodScore(mood?.key) : null;
+  const todayConversationCount = conversations.filter((message) =>
+    message.createdAt.startsWith(today)
+  ).length;
+  const engagementPercent = Math.min(100, todayConversationCount * 20);
+  const attentionItems = notifications.length + (isMoodLow && isMoodToday ? 1 : 0);
 
-  const todayEvents = useMemo(
-    () => schedule.filter((e) => e.date === today),
-    [schedule, today]
-  );
+  const todayEvents = schedule.filter((e) => e.date === today);
 
   if (!mounted) return null;
 
@@ -200,6 +225,117 @@ export default function DashboardPage() {
             ) : (
               <p className="text-sm text-navy/40 font-semibold">No conversation yet</p>
             )}
+          </div>
+        </div>
+
+        <div className="glass-heavy rounded-2xl p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-navy/40">
+                Analytics
+              </p>
+              <h2 className="mt-1 text-lg font-bold text-navy">
+                Uncle Tan&apos;s Stats
+              </h2>
+              <p className="mt-1 text-sm text-navy/55">
+                A quick caretaker snapshot of mood, medication, and engagement.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/45 px-3 py-2 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-navy/35">
+                Attention
+              </p>
+              <p className="text-2xl font-bold text-navy">{attentionItems}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white/35 p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-navy">Mood Check-In</p>
+                  <p className="text-xs text-navy/45">
+                    {isMoodToday && mood
+                      ? `${getMoodEmoji(mood.key)} ${getMoodLabel(mood.key)} today`
+                      : "No mood check-in recorded today"}
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-navy">
+                  {moodScore != null ? `${moodScore}%` : "Pending"}
+                </p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-navy/10">
+                <div
+                  className={`h-full rounded-full transition-all ${getProgressTone(moodScore)}`}
+                  style={{ width: `${moodScore ?? 8}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white/35 p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-navy">Medication Adherence</p>
+                  <p className="text-xs text-navy/45">
+                    {totalMeds > 0
+                      ? `${takenCount} of ${totalMeds} medication reminders marked taken`
+                      : "No medication reminders have been set yet"}
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-navy">
+                  {adherencePercent != null ? `${adherencePercent}%` : "N/A"}
+                </p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-navy/10">
+                <div
+                  className={`h-full rounded-full transition-all ${getProgressTone(adherencePercent)}`}
+                  style={{ width: `${adherencePercent ?? 8}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white/35 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-navy">Engagement</p>
+                  <p className="text-xs text-navy/45">
+                    Based on conversations logged with Auntie Mimi today
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-navy">{todayConversationCount} msgs</p>
+              </div>
+
+              <div className="mb-3 h-2 overflow-hidden rounded-full bg-navy/10">
+                <div
+                  className={`h-full rounded-full transition-all ${getProgressTone(engagementPercent)}`}
+                  style={{ width: `${Math.max(engagementPercent, 8)}%` }}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-white/45 px-2 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-navy/35">
+                    Active
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-navy">{activeReminders}</p>
+                  <p className="text-[11px] text-navy/45">reminders</p>
+                </div>
+                <div className="rounded-xl bg-white/45 px-2 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-navy/35">
+                    Today
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-navy">{todayEvents.length}</p>
+                  <p className="text-[11px] text-navy/45">events</p>
+                </div>
+                <div className="rounded-xl bg-white/45 px-2 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-navy/35">
+                    Alerts
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-navy">{notifications.length}</p>
+                  <p className="text-[11px] text-navy/45">open</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
